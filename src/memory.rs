@@ -1,11 +1,16 @@
-use std::collections::HashMap;
-use crate::cpu::CPU; // Import the CPU struct
+use crate::cpu::CPU;
+use std::collections::HashMap; // Import the CPU struct
 
 pub const MEMORY_ACCESS_COST: u32 = 10;
 
+pub enum WordKind {
+    Instruction,
+    Data,
+}
 
 pub struct Memory {
     pub data: HashMap<u8, u32>, // 64 addresses, each holding a 32-bit value
+    pub kinds: HashMap<u8, WordKind>, // 64 addresses, each holding a kind (Instruction or Data)
 }
 
 impl Memory {
@@ -13,8 +18,11 @@ impl Memory {
     pub fn new() -> Self {
         Memory {
             data: HashMap::new(),
+            kinds: HashMap::new(),
         }
     }
+
+
 
     // Method to load data into memory from a file
     pub fn read_start_data(&mut self, file_path: &str) {
@@ -33,6 +41,7 @@ impl Memory {
                             u32::from_str_radix(parts[1], 2),
                         ) {
                             self.data.insert(address, value);
+                            self.kinds.insert(address, WordKind::Data);
                         }
                     }
                 }
@@ -59,6 +68,7 @@ impl Memory {
                             u32::from_str_radix(parts[1], 2),
                         ) {
                             self.data.insert(address, instruction);
+                            self.kinds.insert(address, WordKind::Instruction);
                         }
                     }
                 }
@@ -67,4 +77,5 @@ impl Memory {
             eprintln!("Failed to open file: {}", file_path);
         }
     }
+
 }

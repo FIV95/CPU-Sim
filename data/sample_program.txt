@@ -1,0 +1,33 @@
+# A practical Python program that demonstrates cache behavior
+def calculate_values():
+    # Initialize values
+    a = 10
+    b = 20
+    
+    # Create a small array/list and fill it
+    data = [0] * 5
+    data[0] = a        # Store a at index 0
+    data[1] = b        # Store b at index 1
+    data[2] = a + b    # Calculate and store c
+    
+    # Conditional logic
+    if data[0] < data[1]:  # Compare values from array
+        data[3] = 10       # Set if true
+    else:
+        data[3] = 0        # Set if false
+    
+    # More calculations
+    data[4] = data[2] - data[0]  # Calculate using array values
+    
+    # Process the data multiple times (to demonstrate cache hits)
+    total = 0
+    for i in range(3):
+        # Accessing the same array elements repeatedly causes cache hits
+        total += data[2] + data[3]
+    
+    # Return results
+    return data[2], data[3], data[4]
+
+# Call the function
+result_c, result_d, result_f = calculate_values()
+print(f"c = {result_c}, d = {result_d}, f = {result_f}")

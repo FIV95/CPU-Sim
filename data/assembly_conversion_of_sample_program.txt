@@ -1,0 +1,26 @@
+# Calculate values function (simplified to be more like a Python program)
+
+# Initialize values
+ADDI R1, R0, 10      # a = 10 (R1 = 0 + 10)
+ADDI R2, R0, 20      # b = 20 (R2 = 0 + 20)
+
+# Perform calculations
+ADD  R3, R1, R2      # c = a + b (R3 = R1 + R2)
+
+# Conditional logic
+SLT  R4, R1, R2      # R4 = (R1 < R2) ? 1 : 0
+BEQ  R4, R0, ELSE    # If R4 == 0 (not less than), go to ELSE
+ADDI R5, R0, 10      # d = 10 (R5 = 0 + 10)
+BEQ  R0, R0, ENDIF   # Unconditional jump to ENDIF
+ELSE:
+ADDI R5, R0, 0       # d = 0 (R5 = 0 + 0)
+ENDIF:
+
+# More calculations
+ADD  R6, R3, R0      # e = c (R6 = R3 + 0)
+SUB  R7, R6, R1      # f = e - a (R7 = R6 - R1)
+
+# Store results (imagine these are return values)
+SW   R3, 40(R0)      # Store c at memory[40]
+SW   R5, 44(R0)      # Store d at memory[44]
+SW   R7, 48(R0)      # Store f at memory[48]
