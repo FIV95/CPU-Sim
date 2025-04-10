@@ -1,0 +1,84 @@
+li r0 T
+li r1 0
+sb r0 r1
+li r0 h
+li r1 1
+sb r0 r1
+li r0 i
+li r1 2
+sb r0 r1
+li r0 s
+li r1 3
+sb r0 r1
+li r0
+li r1 4
+sb r0 r1
+li r0 M
+li r1 5
+sb r0 r1
+li r0 p
+li r1 6
+sb r0 r1
+li r0 .
+li r1 7
+sb r0 r1
+li r1 0
+lb r0 r1
+j 100
+li r1 1
+lb r0 r1
+j 100
+li r1 2
+lb r0 r1
+j 100
+li r1 3
+lb r0 r1
+j 100
+li r1 4
+lb r0 r1
+j 100
+li r1 2
+lb r0 r1
+j 100
+li r1 3
+lb r0 r1
+j 100
+li r1 4
+lb r0 r1
+j 100
+li r1 5
+lb r0 r1
+j 100
+li r1 2
+lb r0 r1
+j 100
+li r1 3
+lb r0 r1
+j 100
+li r1 3
+lb r0 r1
+j 100
+li r1 2
+lb r0 r1
+j 100
+li r1 3
+lb r0 r1
+j 100
+li r1 3
+lb r0 r1
+j 100
+li r1 2
+lb r0 r1
+j 100
+li r1 6
+lb r0 r1
+j 100
+li r1 6
+lb r0 r1
+j 100
+li r1 2
+lb r0 r1
+j 100
+li r1 7
+lb r0 r1
+j 100
