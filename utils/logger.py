@@ -1,6 +1,10 @@
 from typing import Dict, List
 from dataclasses import dataclass, field
 from time import time
+from colorama import init, Fore, Back, Style
+
+# Initialize colorama
+init()
 
 @dataclass
 class CacheOperation:
@@ -15,6 +19,10 @@ class CacheLogger:
         self.operations: List[CacheOperation] = []
         self.stats: Dict[str, Dict[str, int]] = {}
         self.verbose = True  # Set to False to suppress detailed operation logs
+
+    def _get_cache_color(self, cache_name):
+        """Get the appropriate color for a cache name"""
+        return Fore.BLUE if cache_name == "L2Cache" else Fore.CYAN
 
     def _init_stats(self, cache_name):
         """Initialize stats for a cache if not already initialized"""
@@ -43,10 +51,11 @@ class CacheLogger:
 
         # Print operation details if verbose
         if self.verbose:
+            cache_color = self._get_cache_color(cache_name)
             if hit:
-                print(f"[{cache_name}] Write: HIT")
+                print(f"{cache_color}[{cache_name}]{Style.RESET_ALL} {Fore.GREEN}Write: HIT{Style.RESET_ALL}")
             else:
-                print(f"[{cache_name}] Write: MISS - Data: {data}")
+                print(f"{cache_color}[{cache_name}]{Style.RESET_ALL} {Fore.RED}Write: MISS{Style.RESET_ALL} - Data: {Fore.YELLOW}{data}{Style.RESET_ALL}")
 
     def log_cache_read(self, cache_name, hit, data=None):
         """Log cache read operation"""
@@ -63,63 +72,66 @@ class CacheLogger:
 
         # Print operation details if verbose
         if self.verbose:
+            cache_color = self._get_cache_color(cache_name)
             if hit:
-                print(f"[{cache_name}] Read: HIT - Data: {data}")
+                print(f"{cache_color}[{cache_name}]{Style.RESET_ALL} {Fore.GREEN}Read: HIT{Style.RESET_ALL} - Data: {Fore.YELLOW}{data}{Style.RESET_ALL}")
             else:
-                print(f"[{cache_name}] Read: MISS")
+                print(f"{cache_color}[{cache_name}]{Style.RESET_ALL} {Fore.RED}Read: MISS{Style.RESET_ALL}")
 
     def log_instruction(self, instruction):
         """Log instruction being executed"""
         if self.verbose:
-            print(f"\nExecuting: {instruction}")
+            print(f"\n{Fore.MAGENTA}Executing:{Style.RESET_ALL} {Fore.WHITE}{instruction}{Style.RESET_ALL}")
 
     def log_result(self, output_string, exec_time):
         """Log final results with statistics"""
         # Print cache operation summary
-        print("\n" + "="*60)
-        print("CACHE OPERATIONS SUMMARY")
-        print("="*60)
+        print(f"\n{Fore.BLUE}{'='*60}{Style.RESET_ALL}")
+        print(f"{Fore.BLUE}CACHE OPERATIONS SUMMARY{Style.RESET_ALL}")
+        print(f"{Fore.BLUE}{'='*60}{Style.RESET_ALL}")
 
         # Print detailed operation log
-        print("\nOPERATION SEQUENCE:")
-        print("-" * 60)
+        print(f"\n{Fore.CYAN}OPERATION SEQUENCE:{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}{'-' * 60}{Style.RESET_ALL}")
         for op in self.operations:
-            hit_str = "HIT" if op.hit else "MISS"
-            data_str = f" - Data: {op.data}" if op.data is not None else ""
-            print(f"[{op.timestamp:.6f}] [{op.cache_name}] {op.operation.upper()}: {hit_str}{data_str}")
+            hit_str = f"{Fore.GREEN}HIT{Style.RESET_ALL}" if op.hit else f"{Fore.RED}MISS{Style.RESET_ALL}"
+            data_str = f" - Data: {Fore.YELLOW}{op.data}{Style.RESET_ALL}" if op.data is not None else ""
+            cache_color = self._get_cache_color(op.cache_name)
+            print(f"{Fore.WHITE}[{op.timestamp:.6f}]{Style.RESET_ALL} {cache_color}[{op.cache_name}]{Style.RESET_ALL} {op.operation.upper()}: {hit_str}{data_str}")
 
         # Print statistics
-        print("\nCACHE STATISTICS:")
-        print("-" * 60)
+        print(f"\n{Fore.CYAN}CACHE STATISTICS:{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}{'-' * 60}{Style.RESET_ALL}")
         for cache_name, stats in self.stats.items():
-            print(f"\n{cache_name}:")
-            print("  " + "-" * 20)
+            cache_color = self._get_cache_color(cache_name)
+            print(f"\n{cache_color}{cache_name}:{Style.RESET_ALL}")
+            print(f"  {Fore.CYAN}{'-' * 20}{Style.RESET_ALL}")
 
             # Read stats
             total_reads = stats["reads"]
             hits = stats["read_hits"]
             misses = stats["read_misses"]
             hit_rate = (hits / total_reads * 100) if total_reads > 0 else 0
-            print(f"  Reads:")
-            print(f"    Total: {total_reads}")
-            print(f"    Hits: {hits}")
-            print(f"    Misses: {misses}")
-            print(f"    Hit Rate: {hit_rate:.1f}%")
+            print(f"  {Fore.WHITE}Reads:{Style.RESET_ALL}")
+            print(f"    Total: {Fore.YELLOW}{total_reads}{Style.RESET_ALL}")
+            print(f"    Hits: {Fore.GREEN}{hits}{Style.RESET_ALL}")
+            print(f"    Misses: {Fore.RED}{misses}{Style.RESET_ALL}")
+            print(f"    Hit Rate: {Fore.CYAN}{hit_rate:.1f}%{Style.RESET_ALL}")
 
             # Write stats
             total_writes = stats["writes"]
             hits = stats["write_hits"]
             misses = stats["write_misses"]
             hit_rate = (hits / total_writes * 100) if total_writes > 0 else 0
-            print(f"  Writes:")
-            print(f"    Total: {total_writes}")
-            print(f"    Hits: {hits}")
-            print(f"    Misses: {misses}")
-            print(f"    Hit Rate: {hit_rate:.1f}%")
+            print(f"  {Fore.WHITE}Writes:{Style.RESET_ALL}")
+            print(f"    Total: {Fore.YELLOW}{total_writes}{Style.RESET_ALL}")
+            print(f"    Hits: {Fore.GREEN}{hits}{Style.RESET_ALL}")
+            print(f"    Misses: {Fore.RED}{misses}{Style.RESET_ALL}")
+            print(f"    Hit Rate: {Fore.CYAN}{hit_rate:.1f}%{Style.RESET_ALL}")
 
         # Print final output
-        print("\n" + "="*60)
-        print("FINAL RESULTS")
-        print("="*60)
-        print(f"Output String: {output_string}")
-        print(f"Execution Time: {exec_time:.2f} nanoseconds")
+        print(f"\n{Fore.BLUE}{'='*60}{Style.RESET_ALL}")
+        print(f"{Fore.BLUE}FINAL RESULTS{Style.RESET_ALL}")
+        print(f"{Fore.BLUE}{'='*60}{Style.RESET_ALL}")
+        print(f"Output String: {Fore.GREEN}{output_string}{Style.RESET_ALL}")
+        print(f"Execution Time: {Fore.YELLOW}{exec_time:.2f}{Style.RESET_ALL} nanoseconds")
