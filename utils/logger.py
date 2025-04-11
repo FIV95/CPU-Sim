@@ -22,24 +22,16 @@ class LogOperation:
     timestamp: float = field(default_factory=time)
 
 @dataclass
-class CacheOperation:
+class CacheOperation(LogOperation):
     """Cache-specific operation details"""
-    op_type: str
-    description: str
     cache_name: str
-    hit: bool
-    data: Optional[Dict] = None
-    timestamp: float = field(default_factory=time)
+    hit: bool = False
 
 @dataclass
-class AlgorithmStep:
+class AlgorithmStep(LogOperation):
     """Algorithm-specific step details"""
-    op_type: str
-    description: str
-    step_name: str
+    step_name: str = ""
     success: bool = True
-    data: Optional[Dict] = None
-    timestamp: float = field(default_factory=time)
 
 class Logger:
     """Unified logging system for the entire application"""
@@ -382,3 +374,191 @@ class Logger:
         print(f"\n{Fore.CYAN}Performance Metrics:{Style.RESET_ALL}")
         for key, value in metrics.items():
             print(f"  {key}: {value}")
+
+    # New methods for cache transitions and stats
+    def log_cache_transitions(self, cache_name: str, stats: Dict[str, Any]):
+        """Log cache transition statistics"""
+        if not self.should_log(LogLevel.INFO):
+            return
+
+        print(f"\n=== Cache Transition Stats: {cache_name} ===")
+        print(f"Total Operations: {stats['total_ops']}")
+        print(f"Upward Transitions: {stats['upward_transitions']}")
+        print(f"Downward Transitions: {stats['downward_transitions']}")
+        print(f"Upward Transition Rate: {(stats['upward_transitions']/stats['total_ops']*100 if stats['total_ops'] > 0 else 0):.2f}%")
+        print(f"Downward Transition Rate: {(stats['downward_transitions']/stats['total_ops']*100 if stats['total_ops'] > 0 else 0):.2f}%")
+
+        self._operations.append(
+            LogOperation("cache_transitions", f"Cache transitions for {cache_name}", stats)
+        )
+
+    def log_cache_state_issues(self, cache_name: str, issues: List[str]):
+        """Log cache state issues"""
+        if not self.should_log(LogLevel.WARNING):
+            return
+
+        print(f"\n=== {cache_name} State Issues ===")
+        for issue in issues:
+            print(f"- {issue}")
+
+        self._operations.append(
+            LogOperation("cache_state_issues", f"State issues for {cache_name}", {"issues": issues})
+        )
+
+    def log_cache_entry_stats(self, cache_name: str, stats: Dict[str, int]):
+        """Log cache entry statistics"""
+        if not self.should_log(LogLevel.INFO):
+            return
+
+        print(f"\n=== {cache_name} Entry Stats ===")
+        print(f"Total entries: {stats['total_entries']}")
+        print(f"Dirty entries: {stats['dirty_entries']}")
+        print(f"Clean entries: {stats['clean_entries']}")
+
+        self._operations.append(
+            LogOperation("cache_entry_stats", f"Entry stats for {cache_name}", stats)
+        )
+
+    def log_cache_access_patterns(self, cache_name: str, patterns: Dict[str, Any]):
+        """Log cache access patterns"""
+        if not self.should_log(LogLevel.INFO):
+            return
+
+        print(f"\n=== {cache_name} Access Patterns ===")
+        print(f"Total accesses: {patterns['total_accesses']}")
+        print(f"Sequential access rate: {patterns['sequential_rate']:.2f}%")
+        print(f"Random access rate: {patterns['random_rate']:.2f}%")
+        print(f"Repeated access rate: {patterns['repeated_rate']:.2f}%")
+
+        self._operations.append(
+            LogOperation("cache_access_patterns", f"Access patterns for {cache_name}", patterns)
+        )
+
+    # New methods for memory debug info
+    def log_memory_debug(self, memory_name: str, info: Dict[str, Any]):
+        """Log memory debug information"""
+        if not self.should_log(LogLevel.DEBUG):
+            return
+
+        print(f"\n{Fore.CYAN}=== Memory Debug Info: {memory_name} ==={Style.RESET_ALL}")
+        print(f"Type: {info['type']}")
+        print(f"Access Time: {info['access_time']} ns")
+        print(f"Execution Time: {info['exec_time']} ns")
+        print(f"Bandwidth: {info['bandwidth']} bytes/ns")
+        print("\nLatency Statistics:")
+        print(f"  Minimum: {info['latency_stats']['min']} ns")
+        print(f"  Maximum: {info['latency_stats']['max']} ns")
+        print(f"  Average: {info['latency_stats']['total'] / info['latency_stats']['count'] if info['latency_stats']['count'] > 0 else 0} ns")
+        print(f"  Total Operations: {info['latency_stats']['count']}")
+
+        self._operations.append(
+            LogOperation("memory_debug", f"Debug info for {memory_name}", info)
+        )
+
+    def log_memory_contents(self, memory_name: str, info: Dict[str, Any]):
+        """Log memory contents and map"""
+        if not self.should_log(LogLevel.DEBUG):
+            return
+
+        print(f"\nData Size: {info['data_size']} bytes")
+        print("\nData Contents:")
+        for addr, value in info['contents'].items():
+            print(f"  Address {addr}: {value}")
+        print("\nMemory Map:")
+        for addr, region in info['map'].items():
+            print(f"  Address {addr}: {region}")
+        print("\nAccess Pattern:")
+        for pattern, count in info['access_pattern'].items():
+            print(f"  {pattern}: {count}")
+
+        self._operations.append(
+            LogOperation("memory_contents", f"Contents for {memory_name}", info)
+        )
+
+    # New methods for ISA debug info
+    def log_isa_debug(self, info: Dict[str, Any]):
+        """Log ISA debug information"""
+        if not self.should_log(LogLevel.DEBUG):
+            return
+
+        print(f"\n{Fore.CYAN}=== ISA Debug Info ==={Style.RESET_ALL}")
+        if not info.get('memory'):
+            print(f"{Fore.RED}No memory attached{Style.RESET_ALL}")
+            return
+
+        print(f"\nAvailable Instructions: {', '.join(info['instructions'].keys())}")
+        print(f"Output: {info['output']}")
+        print(f"Execution Time: {info['exec_time']} ns")
+
+        print("\nPipeline State:")
+        for stage, instruction in info['pipeline'].items():
+            print(f"  {stage}: {instruction if instruction else 'Empty'}")
+
+        print("\nBranch Prediction:")
+        total_predictions = info['branch_prediction']['correct'] + info['branch_prediction']['incorrect']
+        accuracy = (info['branch_prediction']['correct'] / total_predictions * 100) if total_predictions > 0 else 0
+        print(f"  Total Predictions: {total_predictions}")
+        print(f"  Correct: {info['branch_prediction']['correct']}")
+        print(f"  Incorrect: {info['branch_prediction']['incorrect']}")
+        print(f"  Accuracy: {accuracy:.2f}%")
+
+        self._operations.append(
+            LogOperation("isa_debug", "ISA debug information", info)
+        )
+
+    def log_jump_debug(self, info: Dict[str, Any]):
+        """Log jump operation debug information"""
+        if not self.should_log(LogLevel.DEBUG):
+            return
+
+        print(f"\n=== Jump Debug ===")
+        print(f"Jump target: {info['target']}")
+        print(f"Jump condition register: {info['condition']}")
+        print(f"Current instruction: {info['instruction_pointer']}")
+        for reg, value in info['registers'].items():
+            print(f"{reg}: {value}")
+
+        self._operations.append(
+            LogOperation("jump_debug", "Jump operation debug", info)
+        )
+
+    # New methods for cache debug info
+    def log_cache_debug(self, cache_name: str, info: Dict[str, Any]):
+        """Log cache debug information"""
+        if not self.should_log(LogLevel.DEBUG):
+            return
+
+        print(f"\n{Fore.CYAN}=== Cache Debug Info: {cache_name} ==={Style.RESET_ALL}")
+        print(f"Size: {info['size']} bytes")
+        print(f"Block Size: {info['block_size']} bytes")
+        print(f"Policy: {info['policy']}")
+        print(f"Access Time: {info['access_time']} ns")
+        print(f"Execution Time: {info['exec_time']} ns")
+        print(f"Number of Entries: {info['num_entries']}")
+        print("\nEntries:")
+        for entry in info['entries']:
+            print(f"  Address: {entry['address']}, Data: {entry['data']}, Dirty: {entry['dirty']}")
+        print(f"\nLRU Order: {info['lru_order']}")
+        print(f"Next Level: {info['next_level']}")
+
+        self._operations.append(
+            LogOperation("cache_debug", f"Debug info for {cache_name}", info)
+        )
+
+    def log_cache_config(self, cache_name: str, config: Dict[str, Any]):
+        """Log cache configuration"""
+        if not self.should_log(LogLevel.INFO):
+            return
+
+        print(f"\n{Fore.CYAN}=== Cache Level: {cache_name} ==={Style.RESET_ALL}")
+        print(f"Configuration:")
+        print(f"  Size: {config['size']} bytes")
+        print(f"  Block Size: {config['block_size']} bytes")
+        print(f"  Associativity: {config['associativity']}")
+        print(f"  Write Policy: {config['write_policy']}")
+        print(f"  Access Time: {config['access_time']} ns")
+        print(f"  Total Execution Time: {config['exec_time']} ns")
+
+        self._operations.append(
+            LogOperation("cache_config", f"Configuration for {cache_name}", config)
+        )
