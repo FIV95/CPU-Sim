@@ -23,7 +23,7 @@ class SimulatorGUI(QMainWindow):
         print("Initializing GUI...")
         super().__init__()
         self.setWindowTitle("CPU & Cache Simulator")
-        self.setMinimumSize(1200, 800)
+        self.setMinimumSize(1280, 800)  # Reduced from 1400 to 1280
         print("Window created...")
 
         # Initialize dictionaries for UI elements
@@ -64,8 +64,8 @@ class SimulatorGUI(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setSpacing(8)  # Increased spacing
-        main_layout.setContentsMargins(8, 8, 8, 8)  # Increased margins
+        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(8, 8, 8, 8)
 
         # Create sections
         self.cpu_section = self.create_cpu_section()
@@ -80,11 +80,11 @@ class SimulatorGUI(QMainWindow):
 
         # Create middle section with registers and cache
         middle_layout = QHBoxLayout()
-        middle_layout.setSpacing(8)  # Increased spacing between register and cache sections
+        middle_layout.setSpacing(8)
 
-        # Add register section with stretch factor
-        middle_layout.addWidget(self.register_section, 45)  # Increased to 45% of space
-        middle_layout.addWidget(self.memory_section, 55)  # Decreased to 55% of space
+        # Add register section with equal stretch factor
+        middle_layout.addWidget(self.register_section, 50)  # Equal space
+        middle_layout.addWidget(self.memory_section, 50)  # Equal space
 
         main_layout.addLayout(middle_layout)
 
@@ -132,23 +132,30 @@ class SimulatorGUI(QMainWindow):
         frame = QFrame()
         frame.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(8, 8, 8, 8)  # Increased padding for better spacing
-        layout.setSpacing(4)  # Increased spacing between elements
+        layout.setContentsMargins(4, 4, 4, 4)  # Minimal padding
+        layout.setSpacing(0)  # Remove spacing between elements
 
-        # Registers title with better spacing
+        # Header layout for title
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 4)  # Small bottom margin only
+
+        # Registers title - minimal spacing
         title = QLabel("Registers")
         title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        title.setContentsMargins(0, 0, 0, 4)  # Added bottom margin
-        layout.addWidget(title)
+        title.setContentsMargins(0, 0, 0, 0)
+        title.setFixedHeight(20)  # Fixed small height
+        header_layout.addWidget(title)
+        header_layout.addStretch()  # Push title to the left
+        layout.addLayout(header_layout)
 
         # Create register grid (8 rows x 4 columns)
         register_grid = QHBoxLayout()
-        register_grid.setSpacing(6)  # Increased spacing between columns
+        register_grid.setSpacing(4)  # Small spacing between columns
         register_grid.setContentsMargins(0, 0, 0, 0)
 
         for col in range(4):
             col_layout = QVBoxLayout()
-            col_layout.setSpacing(4)  # Increased spacing between registers
+            col_layout.setSpacing(2)  # Slightly increased spacing between registers
             col_layout.setContentsMargins(0, 0, 0, 0)
             for row in range(8):
                 reg_num = col * 8 + row
@@ -158,36 +165,47 @@ class SimulatorGUI(QMainWindow):
                     QFrame {
                         background-color: #1e1e1e;
                         border: 1px solid #ffaa00;
-                        border-radius: 3px;
-                        padding: 2px;
+                        border-radius: 2px;
                     }
                 """)
                 reg_layout = QHBoxLayout(reg_frame)
-                reg_layout.setContentsMargins(6, 4, 6, 4)  # Increased padding
-                reg_layout.setSpacing(6)  # Increased spacing between name and value
+                reg_layout.setContentsMargins(4, 2, 4, 2)  # Slightly increased vertical padding
+                reg_layout.setSpacing(4)  # Small spacing between name and value
 
                 reg_name = QLabel(f"R{reg_num}")
                 reg_name.setFont(QFont("Courier", 11))
                 reg_name.setStyleSheet("QLabel { color: #888888; }")
-                reg_name.setFixedWidth(35)  # Increased width for register names
+                reg_name.setFixedWidth(32)  # Slightly smaller width for register names
                 reg_layout.addWidget(reg_name)
 
                 value_label = QLabel("0")
                 value_label.setFont(QFont("Courier", 11, QFont.Weight.Bold))
                 value_label.setStyleSheet("QLabel { color: #ffaa00; }")
                 value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-                value_label.setFixedWidth(40)  # Increased width for values
+                value_label.setMinimumWidth(45)  # Ensure enough width for values
                 self.register_labels[f"R{reg_num}"] = value_label
                 reg_layout.addWidget(value_label)
 
-                reg_frame.setFixedHeight(28)  # Increased height for better readability
+                reg_frame.setFixedHeight(24)  # Slightly increased height
                 col_layout.addWidget(reg_frame)
             register_grid.addLayout(col_layout)
 
-        layout.addLayout(register_grid)
+        # Create a widget to hold the register grid
+        register_container = QWidget()
+        register_container.setLayout(register_grid)
+
+        # Create a scroll area to contain the register grid
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(register_container)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameStyle(QFrame.Shape.NoFrame)  # Remove the scroll area border
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Hide vertical scrollbar
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Hide horizontal scrollbar
+
+        layout.addWidget(scroll_area)
 
         # Set a fixed size for the entire register section
-        frame.setFixedWidth(380)  # Increased width for better proportions
+        frame.setFixedWidth(400)  # Keep width the same
         return frame
 
     def create_memory_section(self):
