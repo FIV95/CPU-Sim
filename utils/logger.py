@@ -376,59 +376,52 @@ class Logger:
             print(f"  {key}: {value}")
 
     # New methods for cache transitions and stats
-    def log_cache_transitions(self, cache_name: str, stats: Dict[str, Any]):
-        """Log cache transition statistics"""
-        if not self.should_log(LogLevel.INFO):
-            return
-
-        print(f"\n=== Cache Transition Stats: {cache_name} ===")
-        print(f"Total Operations: {stats['total_ops']}")
-        print(f"Upward Transitions: {stats['upward_transitions']}")
-        print(f"Downward Transitions: {stats['downward_transitions']}")
-        print(f"Upward Transition Rate: {(stats['upward_transitions']/stats['total_ops']*100 if stats['total_ops'] > 0 else 0):.2f}%")
-        print(f"Downward Transition Rate: {(stats['downward_transitions']/stats['total_ops']*100 if stats['total_ops'] > 0 else 0):.2f}%")
+    def log_cache_transitions(self, cache_name: str, stats: Dict[str, int]):
+        """Log cache transition statistics."""
+        if self.should_log(LogLevel.INFO):
+            total_ops = stats['total_ops']
+            print(f"\n=== Cache Transition Stats: {cache_name} ===")
+            print(f"Total Operations: {total_ops}")
+            print(f"Upward Transitions: {stats['upward_transitions']}")
+            print(f"Downward Transitions: {stats['downward_transitions']}")
+            print(f"Upward Transition Rate: {(stats['upward_transitions']/total_ops*100 if total_ops > 0 else 0):.2f}%")
+            print(f"Downward Transition Rate: {(stats['downward_transitions']/total_ops*100 if total_ops > 0 else 0):.2f}%")
 
         self._operations.append(
             Operation("cache_transitions", f"Cache transitions for {cache_name}", stats)
         )
 
-    def log_cache_state_issues(self, cache_name: str, issues: List[str]):
-        """Log cache state issues"""
-        if not self.should_log(LogLevel.WARNING):
-            return
-
-        print(f"\n=== {cache_name} State Issues ===")
-        for issue in issues:
-            print(f"- {issue}")
+    def log_cache_issues(self, cache_name: str, issues: List[str]):
+        """Log cache state validation issues."""
+        if self.should_log(LogLevel.WARNING):
+            print(f"\n=== {cache_name} State Issues ===")
+            for issue in issues:
+                print(f"- {issue}")
 
         self._operations.append(
             Operation("cache_state_issues", f"State issues for {cache_name}", {"issues": issues})
         )
 
-    def log_cache_entry_stats(self, cache_name: str, stats: Dict[str, int]):
-        """Log cache entry statistics"""
-        if not self.should_log(LogLevel.INFO):
-            return
-
-        print(f"\n=== {cache_name} Entry Stats ===")
-        print(f"Total entries: {stats['total_entries']}")
-        print(f"Dirty entries: {stats['dirty_entries']}")
-        print(f"Clean entries: {stats['clean_entries']}")
+    def log_cache_entries(self, cache_name: str, stats: Dict[str, int]):
+        """Log cache entry statistics."""
+        if self.should_log(LogLevel.INFO):
+            print(f"\n=== {cache_name} Entry Stats ===")
+            print(f"Total entries: {stats['total_entries']}")
+            print(f"Dirty entries: {stats['dirty_entries']}")
+            print(f"Clean entries: {stats['clean_entries']}")
 
         self._operations.append(
             Operation("cache_entry_stats", f"Entry stats for {cache_name}", stats)
         )
 
-    def log_cache_access_patterns(self, cache_name: str, patterns: Dict[str, Any]):
-        """Log cache access patterns"""
-        if not self.should_log(LogLevel.INFO):
-            return
-
-        print(f"\n=== {cache_name} Access Patterns ===")
-        print(f"Total accesses: {patterns['total_accesses']}")
-        print(f"Sequential access rate: {patterns['sequential_rate']:.2f}%")
-        print(f"Random access rate: {patterns['random_rate']:.2f}%")
-        print(f"Repeated access rate: {patterns['repeated_rate']:.2f}%")
+    def log_cache_patterns(self, cache_name: str, patterns: Dict[str, float]):
+        """Log cache access pattern statistics."""
+        if self.should_log(LogLevel.INFO):
+            print(f"\n=== {cache_name} Access Patterns ===")
+            print(f"Total accesses: {patterns['total_accesses']}")
+            print(f"Sequential access rate: {patterns['sequential_rate']:.2f}%")
+            print(f"Random access rate: {patterns['random_rate']:.2f}%")
+            print(f"Repeated access rate: {patterns['repeated_rate']:.2f}%")
 
         self._operations.append(
             Operation("cache_access_patterns", f"Access patterns for {cache_name}", patterns)

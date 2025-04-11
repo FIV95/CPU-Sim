@@ -10,37 +10,31 @@ def print_transition_stats(cache):
     upward_transitions = sum(1 for entry in cache._data_flow if entry['operation'] == 'READ' and entry.get('next_level_data') is not None)
     downward_transitions = sum(1 for entry in cache._data_flow if entry['operation'] == 'WRITE' and entry.get('next_level_data') is not None)
 
-    print(f"\n=== Cache Transition Stats: {cache._name} ===")
-    print(f"Total Operations: {total_ops}")
-    print(f"Upward Transitions: {upward_transitions}")
-    print(f"Downward Transitions: {downward_transitions}")
-    print(f"Upward Transition Rate: {(upward_transitions/total_ops*100 if total_ops > 0 else 0):.2f}%")
-    print(f"Downward Transition Rate: {(downward_transitions/total_ops*100 if total_ops > 0 else 0):.2f}%")
+    logger = Logger()
+    logger.log_cache_transitions(cache._name, {
+        'total_ops': total_ops,
+        'upward_transitions': upward_transitions,
+        'downward_transitions': downward_transitions
+    })
 
 def print_cache_state_issues(cache):
     """Print cache state validation issues."""
     issues = cache.validate_state()
     if issues:
-        print(f"\n=== {cache._name} State Issues ===")
-        for issue in issues:
-            print(f"- {issue}")
+        logger = Logger()
+        logger.log_cache_issues(cache._name, issues)
 
 def print_entry_stats(cache):
     """Print cache entry statistics."""
     stats = cache.get_entry_stats()
-    print(f"\n=== {cache._name} Entry Stats ===")
-    print(f"Total entries: {stats['total_entries']}")
-    print(f"Dirty entries: {stats['dirty_entries']}")
-    print(f"Clean entries: {stats['clean_entries']}")
+    logger = Logger()
+    logger.log_cache_entries(cache._name, stats)
 
 def print_access_patterns(cache):
     """Print access pattern statistics for a cache."""
     patterns = cache.get_access_patterns()
-    print(f"\n=== {cache._name} Access Patterns ===")
-    print(f"Total accesses: {patterns['total_accesses']}")
-    print(f"Sequential access rate: {patterns['sequential_rate']:.2f}%")
-    print(f"Random access rate: {patterns['random_rate']:.2f}%")
-    print(f"Repeated access rate: {patterns['repeated_rate']:.2f}%")
+    logger = Logger()
+    logger.log_cache_patterns(cache._name, patterns)
 
 def main():
     # Create a logger
