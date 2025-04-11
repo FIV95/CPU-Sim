@@ -1,5 +1,6 @@
 from time import sleep
 from colorama import Fore, Style
+from utils.logger import Logger, LogLevel
 
 # Memory class used to create different
 # memory types within the simulation
@@ -8,6 +9,7 @@ class Memory():
         self._name = name
         self._access_time = access_time
         self._exec_time = 0
+        self._logger = Logger()
         # New attributes
         self._bandwidth = 0  # Track memory bandwidth usage
         self._latency_stats = {
@@ -48,7 +50,7 @@ class Memory():
         """Read operation"""
         self._exec_time += self._access_time
         if output:
-            print(f" - {self._name} read: ", end="")
+            self._logger.log(LogLevel.DEBUG, f" - {self._name} read: ")
 
     # Output write message and update
     # process execution time
@@ -56,7 +58,7 @@ class Memory():
         """Write operation"""
         self._exec_time += self._access_time
         if output:
-            print(f" - {self._name} write: ", end="")
+            self._logger.log(LogLevel.DEBUG, f" - {self._name} write: ")
 
     # placeholder method
     def get_exec_time(self):
@@ -79,16 +81,16 @@ class Memory():
     def print_debug_info(self):
         """Print formatted debug information about the memory state"""
         info = self.debug_info()
-        print(f"\n{Fore.CYAN}=== Memory Debug Info: {self._name} ==={Style.RESET_ALL}")
-        print(f"Type: {info['type']}")
-        print(f"Access Time: {info['access_time']} ns")
-        print(f"Execution Time: {info['exec_time']} ns")
-        print(f"Bandwidth: {info['bandwidth']} bytes/ns")
-        print("\nLatency Statistics:")
-        print(f"  Minimum: {info['latency_stats']['min']} ns")
-        print(f"  Maximum: {info['latency_stats']['max']} ns")
-        print(f"  Average: {info['latency_stats']['total'] / info['latency_stats']['count'] if info['latency_stats']['count'] > 0 else 0} ns")
-        print(f"  Total Operations: {info['latency_stats']['count']}")
+        self._logger.log(LogLevel.DEBUG, f"\n=== Memory Debug Info: {self._name} ===")
+        self._logger.log(LogLevel.DEBUG, f"Type: {info['type']}")
+        self._logger.log(LogLevel.DEBUG, f"Access Time: {info['access_time']} ns")
+        self._logger.log(LogLevel.DEBUG, f"Execution Time: {info['exec_time']} ns")
+        self._logger.log(LogLevel.DEBUG, f"Bandwidth: {info['bandwidth']} bytes/ns")
+        self._logger.log(LogLevel.DEBUG, "\nLatency Statistics:")
+        self._logger.log(LogLevel.DEBUG, f"  Minimum: {info['latency_stats']['min']} ns")
+        self._logger.log(LogLevel.DEBUG, f"  Maximum: {info['latency_stats']['max']} ns")
+        self._logger.log(LogLevel.DEBUG, f"  Average: {info['latency_stats']['total'] / info['latency_stats']['count'] if info['latency_stats']['count'] > 0 else 0} ns")
+        self._logger.log(LogLevel.DEBUG, f"  Total Operations: {info['latency_stats']['count']}")
 
     def validate_state(self):
         """Validate the memory state and return any issues found"""
@@ -192,19 +194,19 @@ class MainMemory(Memory):
         """Print formatted debug information about the main memory state"""
         info = self.debug_info()
         super().print_debug_info()
-        print(f"\nData Size: {info['data_size']} bytes")
-        print("\nData Contents:")
+        self._logger.log(LogLevel.DEBUG, f"\nData Size: {info['data_size']} bytes")
+        self._logger.log(LogLevel.DEBUG, "\nData Contents:")
         for addr, value in enumerate(info['data']):
             if value is not None:
-                print(f"  Address {addr}: {value}")
+                self._logger.log(LogLevel.DEBUG, f"  Address {addr}: {value}")
 
-        print("\nMemory Map:")
+        self._logger.log(LogLevel.DEBUG, "\nMemory Map:")
         for addr, region in info['memory_map'].items():
-            print(f"  Address {addr}: {region}")
+            self._logger.log(LogLevel.DEBUG, f"  Address {addr}: {region}")
 
-        print("\nAccess Pattern:")
+        self._logger.log(LogLevel.DEBUG, "\nAccess Pattern:")
         for pattern, count in info['access_pattern'].items():
-            print(f"  {pattern}: {count}")
+            self._logger.log(LogLevel.DEBUG, f"  {pattern}: {count}")
 
     def validate_state(self):
         """Validate the main memory state and return any issues found"""
