@@ -39,3 +39,6 @@ ENV/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Project specific
+output.rtf
