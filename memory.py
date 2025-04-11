@@ -45,20 +45,23 @@ class Memory():
     # Output read message and update
     # process execution time
     def read(self, output=True):
+        """Read operation"""
+        self._exec_time += self._access_time
         if output:
             print(f" - {self._name} read: ", end="")
-        self._exec_time += self._access_time
 
     # Output write message and update
     # process execution time
     def write(self, output=True):
+        """Write operation"""
+        self._exec_time += self._access_time
         if output:
             print(f" - {self._name} write: ", end="")
-        self._exec_time += self._access_time
 
     # placeholder method
     def get_exec_time(self):
-        return 0
+        """Return execution time"""
+        return self._exec_time
 
     # Debugging methods
     def debug_info(self):
@@ -130,9 +133,9 @@ class Memory():
 # Memory class used for the main
 # memory data storage
 class MainMemory(Memory):
-    def __init__(self):
-        super().__init__(name="MainMemory", access_time=100)
-        self._data = [None] * 1000
+    def __init__(self, name, access_time):
+        super().__init__(name, access_time)
+        self._data = []
         # New attributes
         self._memory_map = {}  # Track which addresses are mapped to which regions
         self._access_pattern = {
@@ -156,14 +159,19 @@ class MainMemory(Memory):
 
     # Return data from main memory address
     def read(self, address):
-        data = self._data[address]
+        """Read data from memory address"""
         super().read()
-        return data
+        if address < len(self._data):
+            return self._data[address]
+        return None
 
     # Write data to main memory address
     def write(self, address, data):
-        self._data[address] = data
+        """Write data to memory address"""
         super().write()
+        while address >= len(self._data):
+            self._data.append(None)
+        self._data[address] = data
 
     # Return total execution time
     def get_exec_time(self):

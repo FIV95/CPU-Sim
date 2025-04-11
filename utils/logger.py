@@ -14,7 +14,7 @@ class LogLevel(Enum):
     ERROR = 4
 
 @dataclass
-class LogOperation:
+class Operation:
     """Base class for all loggable operations"""
     op_type: str
     description: str
@@ -22,16 +22,24 @@ class LogOperation:
     timestamp: float = field(default_factory=time)
 
 @dataclass
-class CacheOperation(LogOperation):
+class CacheOperation:
     """Cache-specific operation details"""
     cache_name: str
+    op_type: str
+    description: str
     hit: bool = False
+    data: Optional[Dict] = None
+    timestamp: float = field(default_factory=time)
 
 @dataclass
-class AlgorithmStep(LogOperation):
+class AlgorithmStep:
     """Algorithm-specific step details"""
-    step_name: str = ""
+    step_name: str
+    op_type: str
+    description: str
     success: bool = True
+    data: Optional[Dict] = None
+    timestamp: float = field(default_factory=time)
 
 class Logger:
     """Unified logging system for the entire application"""
@@ -47,7 +55,7 @@ class Logger:
         if self._initialized:
             return
 
-        self._operations: List[LogOperation] = []
+        self._operations: List[Operation] = []
         self._cache_stats: Dict[str, Dict[str, int]] = {}
         self._log_level = LogLevel.INFO
         self._operation_timestamps = []
@@ -66,6 +74,7 @@ class Logger:
             raise ValueError("Log level must be a LogLevel enum")
 
     def should_log(self, level: LogLevel) -> bool:
+        """Check if message at given level should be logged"""
         return level.value >= self._log_level.value
 
     def _get_level_color(self, level: LogLevel) -> str:
@@ -79,8 +88,13 @@ class Logger:
         return colors.get(level, Fore.WHITE)
 
     def _get_cache_color(self, cache_name: str) -> str:
-        """Get color for cache name"""
-        return Fore.BLUE if cache_name == "L2Cache" else Fore.CYAN
+        """Get color for cache level"""
+        colors = {
+            "L1Cache": Fore.GREEN,
+            "L2Cache": Fore.BLUE,
+            "L3Cache": Fore.MAGENTA
+        }
+        return colors.get(cache_name, Fore.WHITE)
 
     def _init_cache_stats(self, cache_name: str):
         """Initialize stats for a cache if not already initialized"""
@@ -113,49 +127,35 @@ class Logger:
             color = self._get_level_color(level)
             print(f"{color}{message}{Style.RESET_ALL}")
         self._operations.append(
-            LogOperation(level.name.lower(), message, data)
+            Operation(level.name.lower(), message, data)
         )
 
     # Cache logging methods
-    def log_cache_operation(self, cache_name: str, op_type: str, hit: bool, data: Any = None):
-        """Log cache operations (read/write)"""
-        # Update stats
-        self._init_cache_stats(cache_name)
-        stats = self._cache_stats[cache_name]
-        if op_type == "read":
-            stats["reads"] += 1
-            if hit:
-                stats["read_hits"] += 1
-            else:
-                stats["read_misses"] += 1
-        else:  # write
-            stats["writes"] += 1
-            if hit:
-                stats["write_hits"] += 1
-            else:
-                stats["write_misses"] += 1
-
-        # Track transition
-        self._track_cache_transition(cache_name, op_type, hit)
-
-        # Log operation
+    def log_cache_operation(self, cache_name: str, op_type: str, hit: bool, details: Any = None):
+        """Log cache operations"""
         if self.should_log(LogLevel.DEBUG):
             cache_color = self._get_cache_color(cache_name)
             status = f"{Fore.GREEN}HIT" if hit else f"{Fore.RED}MISS"
-            data_str = f" - Data: {data}" if data is not None else ""
-            print(f"{cache_color}[{cache_name}]{Style.RESET_ALL} {op_type.upper()}: {status}{data_str}")
+            print(f"{cache_color}[{cache_name}]{Style.RESET_ALL} {op_type}: {status}{Style.RESET_ALL}")
+            if details is not None:
+                if isinstance(details, dict):
+                    for key, value in details.items():
+                        print(f"  {key}: {value}")
+                else:
+                    print(f" - Data: {details}")
 
-        # Store operation
+        # Convert non-dict details to dict format
+        details_dict = details if isinstance(details, dict) else {"data": details} if details is not None else None
+
         self._operations.append(
             CacheOperation(
+                cache_name=cache_name,
                 op_type=op_type,
                 description=f"{cache_name} {op_type}",
-                data={"hit": hit, "data": data} if data else {"hit": hit},
-                cache_name=cache_name,
-                hit=hit
+                hit=hit,
+                data=details_dict
             )
         )
-        self._operation_timestamps.append(time())
 
     def log_cache_stats(self, cache_name: str):
         """Log cache statistics"""
@@ -195,7 +195,7 @@ class Logger:
             for key, value in details.items():
                 print(f"{key}: {value}")
         self._operations.append(
-            LogOperation("register", op_type, details)
+            Operation("register", op_type, details)
         )
 
     def log_memory_operation(self, op_type: str, details: Dict[str, Any]):
@@ -205,7 +205,7 @@ class Logger:
             for key, value in details.items():
                 print(f"{key}: {value}")
         self._operations.append(
-            LogOperation("memory", op_type, details)
+            Operation("memory", op_type, details)
         )
 
     def log_instruction(self, instruction: str, details: Dict[str, Any] = None):
@@ -216,19 +216,19 @@ class Logger:
                 for key, value in details.items():
                     print(f"  {key}: {value}")
         self._operations.append(
-            LogOperation("instruction", instruction, details)
+            Operation("instruction", instruction, details)
         )
 
-    def log_jump(self, target: str, condition: str, details: Dict[str, Any]):
+    def log_jump(self, op_type: str, target: str, details: Dict[str, Any]):
         """Log jump operations"""
         if self.should_log(LogLevel.DEBUG):
-            print(f"\n{Fore.YELLOW}=== Jump Operation ==={Style.RESET_ALL}")
+            print(f"\n{Fore.YELLOW}=== Jump {op_type} ==={Style.RESET_ALL}")
             print(f"Target: {target}")
-            print(f"Condition: {condition}")
-            for key, value in details.items():
-                print(f"{key}: {value}")
+            if details:
+                for key, value in details.items():
+                    print(f"{key}: {value}")
         self._operations.append(
-            LogOperation("jump", f"Jump to {target}", details)
+            Operation("jump", f"Jump to {target}", details)
         )
 
     # Algorithm logging methods
@@ -241,10 +241,10 @@ class Logger:
                     print(f"  {key}: {value}")
         self._operations.append(
             AlgorithmStep(
+                step_name=step_type,
                 op_type="algorithm",
                 description=description,
-                data=details,
-                step_name=step_type
+                data=details
             )
         )
 
@@ -304,7 +304,7 @@ class Logger:
                 for key, value in details.items():
                     print(f"  {key}: {value}")
         self._operations.append(
-            LogOperation("error", error_type,
+            Operation("error", error_type,
                      {"message": message, **details} if details else {"message": message})
         )
 
@@ -315,7 +315,7 @@ class Logger:
             for key, value in metrics.items():
                 print(f"{key}: {value}")
         self._operations.append(
-            LogOperation("performance", "Performance metrics", metrics)
+            Operation("performance", "Performance metrics", metrics)
         )
 
     # Analysis and reporting methods
@@ -389,7 +389,7 @@ class Logger:
         print(f"Downward Transition Rate: {(stats['downward_transitions']/stats['total_ops']*100 if stats['total_ops'] > 0 else 0):.2f}%")
 
         self._operations.append(
-            LogOperation("cache_transitions", f"Cache transitions for {cache_name}", stats)
+            Operation("cache_transitions", f"Cache transitions for {cache_name}", stats)
         )
 
     def log_cache_state_issues(self, cache_name: str, issues: List[str]):
@@ -402,7 +402,7 @@ class Logger:
             print(f"- {issue}")
 
         self._operations.append(
-            LogOperation("cache_state_issues", f"State issues for {cache_name}", {"issues": issues})
+            Operation("cache_state_issues", f"State issues for {cache_name}", {"issues": issues})
         )
 
     def log_cache_entry_stats(self, cache_name: str, stats: Dict[str, int]):
@@ -416,7 +416,7 @@ class Logger:
         print(f"Clean entries: {stats['clean_entries']}")
 
         self._operations.append(
-            LogOperation("cache_entry_stats", f"Entry stats for {cache_name}", stats)
+            Operation("cache_entry_stats", f"Entry stats for {cache_name}", stats)
         )
 
     def log_cache_access_patterns(self, cache_name: str, patterns: Dict[str, Any]):
@@ -431,7 +431,7 @@ class Logger:
         print(f"Repeated access rate: {patterns['repeated_rate']:.2f}%")
 
         self._operations.append(
-            LogOperation("cache_access_patterns", f"Access patterns for {cache_name}", patterns)
+            Operation("cache_access_patterns", f"Access patterns for {cache_name}", patterns)
         )
 
     # New methods for memory debug info
@@ -452,7 +452,7 @@ class Logger:
         print(f"  Total Operations: {info['latency_stats']['count']}")
 
         self._operations.append(
-            LogOperation("memory_debug", f"Debug info for {memory_name}", info)
+            Operation("memory_debug", f"Debug info for {memory_name}", info)
         )
 
     def log_memory_contents(self, memory_name: str, info: Dict[str, Any]):
@@ -472,7 +472,7 @@ class Logger:
             print(f"  {pattern}: {count}")
 
         self._operations.append(
-            LogOperation("memory_contents", f"Contents for {memory_name}", info)
+            Operation("memory_contents", f"Contents for {memory_name}", info)
         )
 
     # New methods for ISA debug info
@@ -503,7 +503,7 @@ class Logger:
         print(f"  Accuracy: {accuracy:.2f}%")
 
         self._operations.append(
-            LogOperation("isa_debug", "ISA debug information", info)
+            Operation("isa_debug", "ISA debug information", info)
         )
 
     def log_jump_debug(self, info: Dict[str, Any]):
@@ -519,7 +519,7 @@ class Logger:
             print(f"{reg}: {value}")
 
         self._operations.append(
-            LogOperation("jump_debug", "Jump operation debug", info)
+            Operation("jump_debug", "Jump operation debug", info)
         )
 
     # New methods for cache debug info
@@ -542,7 +542,7 @@ class Logger:
         print(f"Next Level: {info['next_level']}")
 
         self._operations.append(
-            LogOperation("cache_debug", f"Debug info for {cache_name}", info)
+            Operation("cache_debug", f"Debug info for {cache_name}", info)
         )
 
     def log_cache_config(self, cache_name: str, config: Dict[str, Any]):
@@ -560,5 +560,5 @@ class Logger:
         print(f"  Total Execution Time: {config['exec_time']} ns")
 
         self._operations.append(
-            LogOperation("cache_config", f"Configuration for {cache_name}", config)
+            Operation("cache_config", f"Configuration for {cache_name}", config)
         )

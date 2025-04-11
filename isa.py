@@ -13,6 +13,7 @@ class Register(Memory):
         for i in range(32):
             self._register_states[f'R{i}'] = {'value': None, 'dirty': False}
         self._exec_time = 0
+        self._logger = Logger()  # Initialize the logger
 
     # Accessors
     @property
@@ -58,10 +59,10 @@ class Register(Memory):
         """Print formatted debug information about the register state"""
         info = self.debug_info()
         super().print_debug_info()
-        print("\nRegister Contents:")
+        self._logger.log(LogLevel.DEBUG, "Register Contents:")
         for reg, state in info['registers'].items():
             state_str = "Dirty" if state["dirty"] else "Clean"
-            print(f"  {reg}: {state['value']} ({state_str})")
+            self._logger.log(LogLevel.DEBUG, f"  {reg}: {state['value']} ({state_str})")
 
     def validate_state(self):
         """Validate the register state and return any issues found"""
@@ -164,13 +165,13 @@ class ISA():
     # archicture for reading and writing
     def set_memory(self, memory):
         self._memory = memory
-        print(f"ISA memory: {self._memory.name}")
+        self._logger.log(LogLevel.INFO, f"ISA memory: {self._memory.name}")
 
     # Go through lines of instruction file
     def read_instructions(self, file):
         """Read and execute instructions from file"""
         if self._memory is not None:
-            print(f"ISA memory: {self._memory.name}")
+            self._logger.log(LogLevel.INFO, f"ISA memory: {self._memory.name}")
             start = time()
             with open(file) as codefile:
                 # First pass: collect all instructions and labels
@@ -190,13 +191,13 @@ class ISA():
 
                 while self._instruction_pointer < len(self._instructions):
                     if instruction_count >= max_instructions:
-                        print(f"\n{Fore.RED}Error: Maximum instruction limit ({max_instructions}) reached. Possible infinite loop detected.{Style.RESET_ALL}")
+                        self._logger.log_error("Execution Limit", f"Maximum instruction limit ({max_instructions}) reached. Possible infinite loop detected.")
                         return time() - start
 
                     line = self._instructions[self._instruction_pointer]
                     result = self.parse_line(line)
                     if isinstance(result, str) and result in self._labels:
-                        print(f"Jumping to label: {result}")
+                        self._logger.log(LogLevel.DEBUG, f"Jumping to label: {result}")
                         self._instruction_pointer = self._labels[result]
                     else:
                         self._instruction_pointer += 1
@@ -205,7 +206,7 @@ class ISA():
 
             return time() - start
         else:
-            print("Architecture has found no memory")
+            self._logger.log_error("Memory Error", "Architecture has found no memory")
             return None
 
     # Parse line and send arguments
@@ -352,12 +353,13 @@ class ISA():
         result = dest_val - val
         self._registers.write(dest, result)
 
-        print(f"\n=== Subtraction ===")
-        print(f"Destination Register: {dest}")
-        print(f"Source: {src}")
-        print(f"Original Value: {dest_val}")
-        print(f"Subtracted Value: {val}")
-        print(f"Result: {result}")
+        self._logger.log_algorithm_step("Subtraction", "Register subtraction operation", {
+            "Destination Register": dest,
+            "Source": src,
+            "Original Value": dest_val,
+            "Subtracted Value": val,
+            "Result": result
+        })
 
         self._debug_info['register_states'].append({
             'register': dest,
@@ -391,35 +393,36 @@ class ISA():
 
     def print_debug_info(self):
         """Print formatted debug information about the ISA state"""
-        print(f"\n{Fore.CYAN}=== ISA Debug Info ==={Style.RESET_ALL}")
+        self._logger.log(LogLevel.DEBUG, "=== ISA Debug Info ===")
 
         # Print memory info
         if self._memory:
             self._memory.print_debug_info()
         else:
-            print(f"{Fore.RED}No memory attached{Style.RESET_ALL}")
+            self._logger.log_error("Memory Error", "No memory attached")
 
         # Print register info
         self._registers.print_debug_info()
 
         # Print instruction info
-        print(f"\nAvailable Instructions: {', '.join(self._instructions.keys())}")
-        print(f"Output: {self._output}")
-        print(f"Execution Time: {self.get_exec_time()} ns")
+        self._logger.log(LogLevel.DEBUG, f"Available Instructions: {', '.join(self._instructions.keys())}")
+        self._logger.log(LogLevel.DEBUG, f"Output: {self._output}")
+        self._logger.log(LogLevel.DEBUG, f"Execution Time: {self.get_exec_time()} ns")
 
         # Print pipeline state
-        print("\nPipeline State:")
+        self._logger.log(LogLevel.DEBUG, "Pipeline State:")
         for stage, instruction in self._pipeline_state.items():
-            print(f"  {stage}: {instruction if instruction else 'Empty'}")
+            self._logger.log(LogLevel.DEBUG, f"  {stage}: {instruction if instruction else 'Empty'}")
 
         # Print branch prediction stats
         total_predictions = self._branch_prediction["correct"] + self._branch_prediction["incorrect"]
         accuracy = (self._branch_prediction["correct"] / total_predictions * 100) if total_predictions > 0 else 0
-        print("\nBranch Prediction:")
-        print(f"  Total Predictions: {total_predictions}")
-        print(f"  Correct: {self._branch_prediction['correct']}")
-        print(f"  Incorrect: {self._branch_prediction['incorrect']}")
-        print(f"  Accuracy: {accuracy:.2f}%")
+
+        self._logger.log(LogLevel.DEBUG, "Branch Prediction:")
+        self._logger.log(LogLevel.DEBUG, f"  Total Predictions: {total_predictions}")
+        self._logger.log(LogLevel.DEBUG, f"  Correct: {self._branch_prediction['correct']}")
+        self._logger.log(LogLevel.DEBUG, f"  Incorrect: {self._branch_prediction['incorrect']}")
+        self._logger.log(LogLevel.DEBUG, f"  Accuracy: {accuracy:.2f}%")
 
     def validate_state(self):
         """Validate the ISA state and return any issues found"""
@@ -514,16 +517,20 @@ class ISA():
 
     def jmp(self, target, condition=None):
         """Jump instruction used to create simulation output or control flow"""
-        print(f"\n=== Jump Debug ===")
-        print(f"Jump target: {target}")
-        print(f"Jump condition register: {condition}")
-        print(f"Current instruction: {self._instruction_pointer}")
-        print(f"R5 (comparison): {self._registers.read('R5')}")
-        print(f"R6 (outer loop): {self._registers.read('R6')}")
-        print(f"R7 (inner loop): {self._registers.read('R7')}")
-        print(f"R0 (current element): {self._registers.read('R0')}")
-        print(f"R1 (previous element): {self._registers.read('R1')}")
-        print(f"R4 (index): {self._registers.read('R4')}")
+        debug_info = {
+            "target": target,
+            "condition": condition,
+            "instruction_pointer": self._instruction_pointer,
+            "registers": {
+                "R5 (comparison)": self._registers.read('R5'),
+                "R6 (outer loop)": self._registers.read('R6'),
+                "R7 (inner loop)": self._registers.read('R7'),
+                "R0 (current element)": self._registers.read('R0'),
+                "R1 (previous element)": self._registers.read('R1'),
+                "R4 (index)": self._registers.read('R4')
+            }
+        }
+        self._logger.log_jump("Jump Debug", target, debug_info)
 
         # If condition register is provided, check its value
         if condition and condition.startswith('R'):
@@ -531,13 +538,13 @@ class ISA():
             if cond_val is None:
                 raise ValueError(f"Register {condition} contains no value when used as jump condition")
             if cond_val <= 0:
-                print(f"Jump condition not met (register {condition} = {cond_val})")
+                self._logger.log(LogLevel.DEBUG, f"Jump condition not met (register {condition} = {cond_val})")
                 return None
 
         # Special output instruction
         if target == "100":
             data = self._registers.read('R0')
-            print(f"Output instruction - R0 value: {data}")
+            self._logger.log(LogLevel.DEBUG, f"Output instruction - R0 value: {data}")
             if data is not None:
                 self._output += chr(data)
             return None
@@ -545,50 +552,50 @@ class ISA():
         # Label-based jumps
         if target == "outer_loop":
             val = self._registers.read('R6')
-            print(f"Outer loop check - R6 value: {val}")
+            self._logger.log(LogLevel.DEBUG, f"Outer loop check - R6 value: {val}")
             if val > 0:
-                print("Jumping to outer_loop")
+                self._logger.log(LogLevel.DEBUG, "Jumping to outer_loop")
                 return "outer_loop"
             else:
-                print("Outer loop complete")
+                self._logger.log(LogLevel.DEBUG, "Outer loop complete")
         elif target == "inner_loop":
             val = self._registers.read('R7')
-            print(f"Inner loop check - R7 value: {val}")
+            self._logger.log(LogLevel.DEBUG, f"Inner loop check - R7 value: {val}")
             if val > 0:
-                print("Jumping to inner_loop")
+                self._logger.log(LogLevel.DEBUG, "Jumping to inner_loop")
                 return "inner_loop"
             else:
-                print("Inner loop complete")
+                self._logger.log(LogLevel.DEBUG, "Inner loop complete")
         elif target == "no_swap":
             val = self._registers.read('R5')
-            print(f"Swap check - R5 value: {val}")
+            self._logger.log(LogLevel.DEBUG, f"Swap check - R5 value: {val}")
             if val >= 0:
-                print("Skipping swap")
+                self._logger.log(LogLevel.DEBUG, "Skipping swap")
                 return "no_swap"
             else:
-                print("Performing swap")
+                self._logger.log(LogLevel.DEBUG, "Performing swap")
         elif target == "output_loop":
             val = self._registers.read('R2')
-            print(f"Output loop check - R2 value: {val}")
+            self._logger.log(LogLevel.DEBUG, f"Output loop check - R2 value: {val}")
             if val > 0:
-                print("Jumping to output_loop")
+                self._logger.log(LogLevel.DEBUG, "Jumping to output_loop")
                 return "output_loop"
             else:
-                print("Output loop complete")
+                self._logger.log(LogLevel.DEBUG, "Output loop complete")
         else:
             # Try to parse target as a numeric offset
             try:
                 offset = int(target)
-                print(f"Numeric offset jump: {offset}")
+                self._logger.log(LogLevel.DEBUG, f"Numeric offset jump: {offset}")
                 if condition:
                     cond_val = self._registers.read(condition)
                     if cond_val is None:
                         raise ValueError(f"Register {condition} contains no value when used as jump condition")
                     if cond_val <= 0:
-                        print(f"Jump condition not met (register {condition} = {cond_val})")
+                        self._logger.log(LogLevel.DEBUG, f"Jump condition not met (register {condition} = {cond_val})")
                         return None
                 self._instruction_pointer += offset
                 return None
             except ValueError:
-                print(f"Unrecognized jump target: {target}")
+                self._logger.log(LogLevel.WARNING, f"Unrecognized jump target: {target}")
         return None
