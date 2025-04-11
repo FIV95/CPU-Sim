@@ -1,84 +1,232 @@
-li r0 T
-li r1 0
-sb r0 r1
-li r0 h
-li r1 1
-sb r0 r1
-li r0 i
-li r1 2
-sb r0 r1
-li r0 s
-li r1 3
-sb r0 r1
-li r0
-li r1 4
-sb r0 r1
-li r0 M
-li r1 5
-sb r0 r1
-li r0 p
-li r1 6
-sb r0 r1
-li r0 .
-li r1 7
-sb r0 r1
-li r1 0
-lb r0 r1
-j 100
-li r1 1
-lb r0 r1
-j 100
-li r1 2
-lb r0 r1
-j 100
-li r1 3
-lb r0 r1
-j 100
-li r1 4
-lb r0 r1
-j 100
-li r1 2
-lb r0 r1
-j 100
-li r1 3
-lb r0 r1
-j 100
-li r1 4
-lb r0 r1
-j 100
-li r1 5
-lb r0 r1
-j 100
-li r1 2
-lb r0 r1
-j 100
-li r1 3
-lb r0 r1
-j 100
-li r1 3
-lb r0 r1
-j 100
-li r1 2
-lb r0 r1
-j 100
-li r1 3
-lb r0 r1
-j 100
-li r1 3
-lb r0 r1
-j 100
-li r1 2
-lb r0 r1
-j 100
-li r1 6
-lb r0 r1
-j 100
-li r1 6
-lb r0 r1
-j 100
-li r1 2
-lb r0 r1
-j 100
-li r1 7
-lb r0 r1
-j 100
+# Register allocation:
+# R0-R3: Temporary data and array elements
+# R4: Array index calculations
+# R5: Comparison results
+# R6: Outer loop counter
+# R7: Inner loop counter
+# Memory allocation:
+# [0-9]: Array elements (10 numbers)
+# [10]: Temp storage for previous element
+# [11]: Temp storage for current element
+# [12]: Print loop counter
+# [13]: Array size
+
+print "============================================"
+print "BUBBLE SORT IMPLEMENTATION"
+print "============================================"
+
+# Initialize array with 10 numbers
+print "\n[INITIALIZATION] Setting up array with 10 numbers..."
+mov R0 5
+mov [0] R0
+mov R0 2
+mov [1] R0
+mov R0 8
+mov [2] R0
+mov R0 1
+mov [3] R0
+mov R0 9
+mov [4] R0
+mov R0 3
+mov [5] R0
+mov R0 7
+mov [6] R0
+mov R0 4
+mov [7] R0
+mov R0 6
+mov [8] R0
+mov R0 0
+mov [9] R0
+
+# Print initial array state
+print "\n[INITIAL STATE] Array before sorting:"
+print "----------------------------------------"
+mov R12 0  # Print loop counter
+print_initial:
+mov R0 [R12]  # Load array element
+print "["
+print R12
+print "] = "
+print R0
+print "\n"
+add R12 1  # Increment print loop counter
+mov R13 9  # Array size
+sub R13 R12  # Calculate remaining iterations
+jmp print_initial R13  # Continue if more elements to print
+print "----------------------------------------"
+
+# Initialize array size and counters
+mov R13 10  # Array size
+mov R6 9  # Outer loop counter (n-1)
+print "\n[SORTING] Starting bubble sort..."
+print "Array size: "
+print R13
+print "\n"
+
+outer_loop:
+print "============================================"
+print "OUTER LOOP ITERATION"
+print "============================================"
+print "Outer counter (R6) = "
+print R6
+mov R7 R6  # Inner loop counter starts at outer counter value
+print "Inner counter (R7) = "
+print R7
+print "\n"
+
+inner_loop:
+print "----------------------------------------"
+print "COMPARING ELEMENTS:"
+print "Position "
+print R7
+print " and "
+sub R7 1
+print R7
+print "\n"
+
+# Load current and previous elements
+mov R0 [R7]  # Current element
+mov [11] R0  # Store current in temp
+print "Current element  = "
+print R0
+
+add R7 1  # Restore R7
+mov R0 [R7]  # Previous element
+mov [10] R0  # Store previous in temp
+print "Previous element = "
+print R0
+print "\n"
+
+# Compare elements
+mov R0 [11]  # Load current
+mov R1 [10]  # Load previous
+sub R0 R1  # Compare current - previous
+print "Comparison (current - previous) = "
+print R0
+print "\n"
+
+# If current >= previous, skip swap
+jmp skip_swap R0
+
+# Swap elements
+print ">>> SWAP NEEDED! <<<"
+mov R0 [11]  # Current element
+mov [R7] R0  # Move current to previous position
+sub R7 1  # Move to current position
+mov R0 [10]  # Previous element
+mov [R7] R0  # Move previous to current position
+add R7 1  # Restore R7 position
+print "Elements have been swapped.\n"
+
+skip_swap:
+print "Current state of compared elements:"
+mov R0 [R7]
+print "Position "
+print R7
+print ": "
+print R0
+sub R7 1
+mov R0 [R7]
+print "Position "
+print R7
+print ": "
+print R0
+add R7 1
+print "\n"
+
+# Decrement inner counter and check if we should continue
+sub R7 1
+print "Inner counter (R7) decremented to: "
+print R7
+print "\n"
+mov R0 R7
+sub R0 R6  # Compare with outer counter
+jmp inner_loop R0  # Continue if R7 > R6
+
+# End of inner loop
+print "============================================"
+print "END OF PASS"
+print "============================================"
+print "Outer counter (R6) decremented to: "
+print R6
+print "\n"
+
+# Print current array state after this pass
+print "CURRENT ARRAY STATE:"
+print "----------------------------------------"
+mov R12 0  # Reset print counter
+print_pass:
+mov R0 [R12]
+print "["
+print R12
+print "] = "
+print R0
+print "\n"
+add R12 1
+mov R13 9  # Array size
+sub R13 R12
+jmp print_pass R13
+print "----------------------------------------\n"
+
+# Decrement outer counter and check if we should continue
+sub R6 1
+mov R0 R6
+add R0 1  # Add 1 to make comparison work with jmp
+jmp outer_loop R0  # Continue if R6 >= 0
+
+# Print final array state
+print "============================================"
+print "FINAL SORTED ARRAY"
+print "============================================"
+print "----------------------------------------"
+mov R12 0  # Reset print counter
+print_final:
+mov R0 [R12]
+print "["
+print R12
+print "] = "
+print R0
+print "\n"
+add R12 1
+mov R13 9  # Array size
+sub R13 R12
+jmp print_final R13
+print "----------------------------------------\n"
+
+# Verify array is sorted
+print "============================================"
+print "VERIFICATION"
+print "============================================"
+print "Checking if array is properly sorted...\n"
+mov R12 0  # Reset counter
+verify_loop:
+mov R0 [R12]  # Current element
+add R12 1
+mov R1 [R12]  # Next element
+sub R0 R1  # Compare current - next
+print "Comparing ["
+sub R12 1
+print R12
+print "] = "
+sub R12 1
+mov R0 [R12]
+print R0
+print " with ["
+add R12 1
+print R12
+print "] = "
+add R12 1
+mov R1 [R12]
+print R1
+print " (Difference = "
+sub R0 R1
+print R0
+print ")\n"
+add R12 1
+mov R13 9  # Array size
+sub R13 R12
+jmp verify_loop R13
+
+print "============================================"
+print "SORTING COMPLETE!"
+print "============================================"
