@@ -1,36 +1,40 @@
 from .policies import ReplacementPolicy
-from utils.logger import CacheLogger
+from utils.logger import Logger, LogLevel
 from colorama import Fore, Style
-from time import time
 
 class Cache:
-    def __init__(self, name, size, block_size, policy, access_time, next_level=None, logger=None):
+    def __init__(self, name, size, associativity, block_size, access_time, policy, next_level=None, logger=None):
+        """Initialize a cache with the given parameters.
+
+        Args:
+            name (str): Name of the cache (e.g., 'L1Cache', 'L2Cache')
+            size (int): Total size of the cache in bytes
+            associativity (int): Number of ways in each set
+            block_size (int): Size of each cache block in bytes
+            access_time (float): Time taken to access this cache
+            policy (str): Cache write policy ('write-through' or 'write-back')
+            next_level (Cache or MainMemory, optional): Next level in memory hierarchy
+            logger (Logger, optional): Logger instance for debugging
+        """
         self._name = name
         self._size = size
+        self._associativity = associativity
         self._block_size = block_size
-        self._policy = policy
         self._access_time = access_time
+        self._policy = policy
+        self._write_policy = policy  # Set write policy from input
+        self._write_allocate = True if policy == 'write-back' else False  # Write-back implies write-allocate
+        self._next_level = next_level
+        self._logger = logger or Logger()  # Use provided logger or create new one
         self._exec_time = 0
         self._entries = []
         self._lru_order = []  # Track order of access for LRU policy
-        self._next_level = next_level  # Next level of memory (Cache or MainMemory)
+        self._data_flow = []  # Track data flow history
         self._policies = {
             "random": ReplacementPolicy.random,
             "fifo": ReplacementPolicy.fifo,
             "lru": ReplacementPolicy.lru
         }
-        self._logger = logger
-        self._access_patterns = {
-            "sequential": 0,
-            "random": 0,
-            "repeated": 0
-        }
-        self._last_access = None
-        self._access_history = []
-        # New attributes
-        self._write_back_buffer = []  # Track pending write-back operations
-        self._coherence_state = {}  # Track cache line states (MESI protocol)
-        self._prefetch_buffer = []  # For future prefetching implementation
 
     # Accessors
     @property
@@ -108,56 +112,11 @@ class Cache:
     def logger(self, value):
         self._logger = value
 
-    def _update_access_pattern(self, address):
-        """Track and analyze memory access patterns"""
-        if self._last_access is not None:
-            # Check if access is sequential
-            if address == self._last_access + 1:
-                self._access_patterns["sequential"] += 1
-            # Check if access is repeated
-            elif address == self._last_access:
-                self._access_patterns["repeated"] += 1
-            else:
-                self._access_patterns["random"] += 1
-
-        self._last_access = address
-        self._access_history.append({
-            "address": address,
-            "timestamp": time()
-        })
-
-    def get_access_patterns(self):
-        """Return statistics about memory access patterns"""
-        total_accesses = sum(self._access_patterns.values())
-        if total_accesses == 0:
-            return {
-                "sequential": 0,
-                "random": 0,
-                "repeated": 0,
-                "percentages": {
-                    "sequential": 0,
-                    "random": 0,
-                    "repeated": 0
-                }
-            }
-
-        return {
-            "counts": self._access_patterns,
-            "percentages": {
-                pattern: (count / total_accesses * 100)
-                for pattern, count in self._access_patterns.items()
-            }
-        }
-
-    def get_access_history(self, limit=100):
-        """Return recent access history"""
-        return self._access_history[-limit:] if limit else self._access_history
-
     def write(self, address, data):
         """Write data to cache and handle cache misses"""
-        self._update_access_pattern(address)
         self._exec_time += self._access_time
         entry = self.get_entry(address)
+        next_level_data = None
 
         if entry is not None:
             entry["data"] = data
@@ -165,11 +124,9 @@ class Cache:
             if self._policy == "lru":
                 self._lru_order.remove(entry)
                 self._lru_order.append(entry)
-            if self._logger:
-                self._logger.log_cache_write(self._name, hit=True, data=data)
+            self._logger.log_cache_operation(self._name, "write", True, data)
         else:
-            if self._logger:
-                self._logger.log_cache_write(self._name, hit=False, data=data)
+            self._logger.log_cache_operation(self._name, "write", False, data)
             if len(self._entries) >= self._size:
                 self.replace_entry(address)
             else:
@@ -179,24 +136,27 @@ class Cache:
 
         # Write through to next level
         if self._next_level:
+            next_level_data = data
             self._next_level.write(address, data)
+
+        # Track data flow
+        self.track_data_flow('write', address, data, next_level_data)
 
     def read(self, address):
         """Read data from cache and handle cache misses"""
-        self._update_access_pattern(address)
         self._exec_time += self._access_time
         entry = self.get_entry(address)
+        next_level_data = None
 
         if entry is not None:
             if self._policy == "lru":
                 self._lru_order.remove(entry)
                 self._lru_order.append(entry)
-            if self._logger:
-                self._logger.log_cache_read(self._name, hit=True, data=entry["data"])
+            self._logger.log_cache_operation(self._name, "read", True, entry["data"])
+            self.track_data_flow('read', address, entry["data"], None)
             return entry["data"]
         else:
-            if self._logger:
-                self._logger.log_cache_read(self._name, hit=False)
+            self._logger.log_cache_operation(self._name, "read", False)
             if len(self._entries) >= self._size:
                 self.replace_entry(address)
             else:
@@ -209,8 +169,11 @@ class Cache:
             if self._next_level:
                 data = self._next_level.read(address)
                 self._entries[-1]["data"] = data
-                if self._logger:
-                    self._logger.log_cache_read(self._name, hit=False, data=data)
+                next_level_data = data
+                self._logger.log_cache_operation(self._name, "read", False, data)
+
+            # Track data flow
+            self.track_data_flow('read', address, data, next_level_data)
             return data
 
     def replace_entry(self, address):
@@ -251,13 +214,7 @@ class Cache:
             "num_entries": len(self._entries),
             "entries": self._entries,
             "lru_order": [entry["address"] for entry in self._lru_order] if self._policy == "lru" else None,
-            "next_level": self._next_level.name if self._next_level else None,
-            "write_back_buffer": self._write_back_buffer,
-            "coherence_states": self._coherence_state,
-            "prefetch_buffer": self._prefetch_buffer,
-            "access_patterns": self._access_patterns,
-            "last_access": self._last_access,
-            "access_history_size": len(self._access_history)
+            "next_level": self._next_level.name if self._next_level else None
         }
         return info
 
@@ -271,31 +228,12 @@ class Cache:
         print(f"Access Time: {info['access_time']} ns")
         print(f"Execution Time: {info['exec_time']} ns")
         print(f"Number of Entries: {info['num_entries']}")
-
         print("\nEntries:")
         for entry in info['entries']:
             print(f"  Address: {entry['address']}, Data: {entry['data']}, Dirty: {entry['dirty']}")
-
         if info['lru_order']:
             print(f"\nLRU Order: {info['lru_order']}")
-
         print(f"Next Level: {info['next_level']}")
-
-        print("\nWrite-Back Buffer:")
-        for wb in info['write_back_buffer']:
-            print(f"  {wb}")
-
-        print("\nCoherence States:")
-        for addr, state in info['coherence_states'].items():
-            print(f"  Address {addr}: {state}")
-
-        print("\nPrefetch Buffer:")
-        for prefetch in info['prefetch_buffer']:
-            print(f"  {prefetch}")
-
-        print("\nAccess Patterns:")
-        for pattern, count in info['access_patterns'].items():
-            print(f"  {pattern}: {count}")
 
     def validate_state(self):
         """Validate the cache state and return any issues found"""
@@ -318,16 +256,6 @@ class Cache:
         if len(addresses) != len(set(addresses)):
             issues.append("Duplicate addresses found in cache entries")
 
-        # Check write-back buffer consistency
-        for wb in self._write_back_buffer:
-            if wb["address"] not in addresses:
-                issues.append(f"Write-back buffer contains address not in cache: {wb['address']}")
-
-        # Check coherence state consistency
-        for addr in self._coherence_state:
-            if addr not in addresses:
-                issues.append(f"Coherence state exists for address not in cache: {addr}")
-
         return issues
 
     def get_entry_stats(self):
@@ -339,12 +267,147 @@ class Cache:
             "address_range": {
                 "min": min(entry["address"] for entry in self._entries) if self._entries else None,
                 "max": max(entry["address"] for entry in self._entries) if self._entries else None
-            },
-            "write_back_buffer_size": len(self._write_back_buffer),
-            "coherence_states": {
-                state: sum(1 for s in self._coherence_state.values() if s == state)
-                for state in set(self._coherence_state.values())
-            },
-            "prefetch_buffer_size": len(self._prefetch_buffer)
+            }
         }
         return stats
+
+    def print_hierarchy_info(self):
+        """Print comprehensive information about the cache hierarchy."""
+        print(f"\n{Fore.CYAN}=== Cache Level: {self._name} ==={Style.RESET_ALL}")
+        print(f"Configuration:")
+        print(f"  Size: {self._size} bytes")
+        print(f"  Block Size: {self._block_size} bytes")
+        print(f"  Associativity: {self._associativity}")
+        print(f"  Write Policy: {self._write_policy}")
+        print(f"  Access Time: {self._access_time} ns")
+        print(f"  Total Execution Time: {self._exec_time} ns")
+
+        # Print entry statistics
+        stats = self.get_entry_stats()
+        print(f"\nEntry Statistics:")
+        print(f"  Total Entries: {stats['total_entries']}")
+        print(f"  Dirty Entries: {stats['dirty_entries']}")
+        print(f"  Clean Entries: {stats['clean_entries']}")
+        if stats['address_range']['min'] is not None:
+            print(f"  Address Range: {stats['address_range']['min']} - {stats['address_range']['max']}")
+
+        # Print next level information if available
+        if self._next_level:
+            if hasattr(self._next_level, 'print_hierarchy_info'):
+                self._next_level.print_hierarchy_info()
+            else:
+                print(f"\n{Fore.YELLOW}=== Main Memory ==={Style.RESET_ALL}")
+                print(f"Access Time: {self._next_level.access_time} ns")
+                print(f"Total Execution Time: {self._next_level.exec_time} ns")
+
+    def validate_hierarchy(self):
+        """
+        Validates the entire cache hierarchy by checking data consistency and coherence.
+
+        Returns:
+            list: A list of validation issues found in the hierarchy.
+        """
+        issues = []
+
+        # First validate this cache's state
+        state_issues = self.validate_state()
+        issues.extend(state_issues)
+
+        # Check data consistency with next level if it exists and is a cache
+        if self._next_level and isinstance(self._next_level, Cache):
+            # For each entry in this cache
+            for entry in self._entries:
+                if entry.get("data") is not None:
+                    address = entry["address"]
+                    data = entry["data"]
+
+                    # Find corresponding data in next level
+                    next_level_data = self._next_level.read(address)
+
+                    if next_level_data is None:
+                        issues.append(f"Data at address {address} in {self._name} not found in {self._next_level._name}")
+                    elif data != next_level_data:
+                        issues.append(f"Data inconsistency at address {address} between {self._name} and {self._next_level._name}")
+
+            # Recursively validate next level
+            next_level_issues = self._next_level.validate_hierarchy()
+            issues.extend(next_level_issues)
+
+        return issues
+
+    def track_data_flow(self, operation, address, data=None, next_level_data=None):
+        """
+        Track data flow through the cache hierarchy.
+
+        Args:
+            operation (str): The operation being performed ('read' or 'write')
+            address (int): The memory address being accessed
+            data (int, optional): The data being written or read
+            next_level_data (int, optional): Data from the next level cache/memory
+        """
+        # Calculate block address and offset
+        block_addr = address // self._block_size
+        offset = address % self._block_size
+
+        # Calculate set index and tag
+        set_index = block_addr % (self._size // (self._block_size * self._associativity))
+        tag = block_addr // (self._size // (self._block_size * self._associativity))
+
+        # Create flow entry
+        flow_entry = {
+            'operation': operation,
+            'address': address,
+            'data': data,
+            'block_addr': block_addr,
+            'set_index': set_index,
+            'tag': tag,
+            'offset': offset,
+            'cache_name': self._name,
+            'next_level_data': next_level_data
+        }
+
+        # Add to data flow history
+        self._data_flow.append(flow_entry)
+
+        # Track in next level if it exists and is a cache
+        if self._next_level and isinstance(self._next_level, Cache):
+            self._next_level.track_data_flow(operation, address, data, next_level_data)
+
+    def get_access_patterns(self):
+        patterns = {
+            'total_accesses': len(self._data_flow),
+            'sequential_accesses': 0,
+            'random_accesses': 0,
+            'repeated_accesses': 0,
+            'sequential_rate': 0.0,
+            'random_rate': 0.0,
+            'repeated_rate': 0.0
+        }
+
+        if len(self._data_flow) > 1:
+            seen_addresses = set()
+
+            for i in range(len(self._data_flow)):
+                curr_addr = self._data_flow[i]['address']
+
+                # Check for repeated access
+                if curr_addr in seen_addresses:
+                    patterns['repeated_accesses'] += 1
+                seen_addresses.add(curr_addr)
+
+                # Check for sequential vs random access
+                if i > 0:
+                    prev_addr = self._data_flow[i-1]['address']
+                    if curr_addr == prev_addr + 1:
+                        patterns['sequential_accesses'] += 1
+                    else:
+                        patterns['random_accesses'] += 1
+
+            # Calculate rates
+            total_transitions = len(self._data_flow) - 1
+            if total_transitions > 0:
+                patterns['sequential_rate'] = (patterns['sequential_accesses'] / total_transitions) * 100
+                patterns['random_rate'] = (patterns['random_accesses'] / total_transitions) * 100
+                patterns['repeated_rate'] = (patterns['repeated_accesses'] / len(self._data_flow)) * 100
+
+        return patterns

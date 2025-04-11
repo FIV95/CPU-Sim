@@ -1,3 +1,3 @@
-from .logger import CacheLogger
+from .logger import Logger, LogLevel
 
-__all__ = ['CacheLogger']
+__all__ = ['Logger', 'LogLevel']

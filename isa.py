@@ -1,56 +1,57 @@
 from memory import Memory
 from time import time
 from colorama import Fore, Style
+from utils.logger import Logger, LogLevel
 
 # Register class used for register
 # data storage in the ISA() class
 class Register(Memory):
     def __init__(self):
-        super().__init__(name="Register", access_time=0.1)
-        self._data = {"r0": None, "r1": None}
-        # New attributes
-        self._register_states = {
-            "r0": {"dirty": False, "last_modified": None},
-            "r1": {"dirty": False, "last_modified": None}
-        }
+        """Initialize register states"""
+        self._register_states = {}
+        # Initialize 32 general-purpose registers
+        for i in range(32):
+            self._register_states[f'R{i}'] = {'value': None, 'dirty': False}
+        self._exec_time = 0
 
     # Accessors
     @property
     def data(self):
-        return self._data
+        return self._register_states
 
     # Mutators
     @data.setter
     def data(self, value):
         if isinstance(value, dict):
-            self._data = value
+            self._register_states = value
         else:
             raise ValueError("Data must be a dictionary")
 
     # Read data to register address
     def read(self, address):
-        super().read(output=False)
-        return self._data[address]
+        """Read value from register"""
+        if address in self._register_states:
+            return self._register_states[address]['value']
+        return None
 
     # Write data to register address
-    def write(self, address, data):
-        """Write data to register address"""
-        super().write(output=False)
-        self._data[address] = data
-        self._register_states[address]["dirty"] = True
-        self._register_states[address]["last_modified"] = time()
+    def write(self, address, value):
+        """Write value to register"""
+        if address in self._register_states:
+            self._register_states[address]['value'] = value
+            self._register_states[address]['dirty'] = True
 
     # Return total execution time
     def get_exec_time(self):
+        """Return execution time"""
         return self._exec_time
 
     def debug_info(self):
         """Return detailed debug information about the register state"""
-        info = super().debug_info()
-        info.update({
-            "registers": self._data,
-            "register_states": self._register_states
-        })
+        info = {
+            "registers": self._register_states,
+            "exec_time": self._exec_time
+        }
         return info
 
     def print_debug_info(self):
@@ -58,34 +59,25 @@ class Register(Memory):
         info = self.debug_info()
         super().print_debug_info()
         print("\nRegister Contents:")
-        for reg, value in info['registers'].items():
-            state = info['register_states'][reg]
+        for reg, state in info['registers'].items():
             state_str = "Dirty" if state["dirty"] else "Clean"
-            last_modified = state["last_modified"] if state["last_modified"] else "Never"
-            print(f"  {reg}: {value} ({state_str}, Last Modified: {last_modified})")
+            print(f"  {reg}: {state['value']} ({state_str})")
 
     def validate_state(self):
         """Validate the register state and return any issues found"""
         issues = super().validate_state()
 
         # Check register data
-        if not isinstance(self._data, dict):
+        if not isinstance(self._register_states, dict):
             issues.append("Register data is not a dictionary")
         else:
-            # Check for required registers
-            required_regs = ["r0", "r1"]
+            # Check for required registers (all 32)
+            required_regs = [f'R{i}' for i in range(32)]
             for reg in required_regs:
-                if reg not in self._data:
-                    issues.append(f"Missing required register: {reg}")
                 if reg not in self._register_states:
-                    issues.append(f"Missing state for register: {reg}")
-
-        # Check register states
-        for reg, state in self._register_states.items():
-            if reg not in self._data:
-                issues.append(f"State exists for non-existent register: {reg}")
-            if not isinstance(state["dirty"], bool):
-                issues.append(f"Invalid dirty state for register {reg}")
+                    issues.append(f"Missing required register: {reg}")
+                if not isinstance(self._register_states[reg]['dirty'], bool):
+                    issues.append(f"Invalid dirty state for register {reg}")
 
         return issues
 
@@ -94,27 +86,31 @@ class ISA():
     def __init__(self):
         self._memory = None
         self._registers = Register()
-        self._instructions = {
-            "lb": self.load_b,
-            "sb": self.store,
-            "li": self.load_i,
-            "j": self.jump,
-        }
+        self._instructions = []  # List of instructions
+        self._labels = {}       # Dictionary of label locations
+        self._instruction_pointer = 0
         self._output = ""
+        self._logger = Logger()  # Initialize the logger
+        self._debug_info = {
+            'register_states': [],
+            'memory_accesses': [],
+            'instruction_counts': {},
+            'branch_predictions': [],
+            'pipeline_stages': []
+        }
         self._instruction_counts = {
-            "lb": 0,
-            "sb": 0,
-            "li": 0,
-            "j": 0
+            "mov": 0,
+            "add": 0,
+            "sub": 0,
+            "jmp": 0
         }
         self._instruction_times = {
-            "lb": 0,
-            "sb": 0,
-            "li": 0,
-            "j": 0
+            "mov": 0,
+            "add": 0,
+            "sub": 0,
+            "jmp": 0
         }
         self._last_instruction_time = None
-        # New attributes
         self._pipeline_state = {
             "fetch": None,
             "decode": None,
@@ -172,14 +168,41 @@ class ISA():
 
     # Go through lines of instruction file
     def read_instructions(self, file):
+        """Read and execute instructions from file"""
         if self._memory is not None:
             print(f"ISA memory: {self._memory.name}")
             start = time()
             with open(file) as codefile:
-                code = codefile.readlines()
-                lines = [line.strip() for line in code if line.strip() != '']
-                for line in lines:
-                    self.parse_line(line)
+                # First pass: collect all instructions and labels
+                self._instructions = []
+                self._labels = {}
+                lines = [line.strip() for line in codefile.readlines() if line.strip() != '']
+                for i, line in enumerate(lines):
+                    if line.endswith(':'):
+                        self._labels[line[:-1]] = i
+                    else:
+                        self._instructions.append(line)
+
+                # Second pass: execute instructions
+                self._instruction_pointer = 0
+                max_instructions = 650  # Increased from 150 to allow bubble sort to complete
+                instruction_count = 0
+
+                while self._instruction_pointer < len(self._instructions):
+                    if instruction_count >= max_instructions:
+                        print(f"\n{Fore.RED}Error: Maximum instruction limit ({max_instructions}) reached. Possible infinite loop detected.{Style.RESET_ALL}")
+                        return time() - start
+
+                    line = self._instructions[self._instruction_pointer]
+                    result = self.parse_line(line)
+                    if isinstance(result, str) and result in self._labels:
+                        print(f"Jumping to label: {result}")
+                        self._instruction_pointer = self._labels[result]
+                    else:
+                        self._instruction_pointer += 1
+
+                    instruction_count += 1
+
             return time() - start
         else:
             print("Architecture has found no memory")
@@ -188,57 +211,158 @@ class ISA():
     # Parse line and send arguments
     # to the correct instruction
     def parse_line(self, line):
-        tokens = line.split(' ')
-        inst = tokens[0]
+        """Parse a single instruction line in x86-like format"""
+        # Remove comments (everything after #)
+        line = line.split('#')[0].strip()
+        if not line:
+            return None
+
+        # Split the instruction and operands
+        parts = line.split()
+        if not parts:
+            return None
+
+        opcode = parts[0].upper()
+
+        # Handle operands based on instruction type
+        if opcode == "MOV":
+            if len(parts) != 3:
+                return None
+            dest = parts[1].strip(',')
+            src = parts[2]
+            return self.mov(dest, src)
+        elif opcode == "ADD":
+            if len(parts) != 3:
+                return None
+            dest = parts[1].strip(',')
+            src = parts[2]
+            return self.add(dest, src)
+        elif opcode == "SUB":
+            if len(parts) != 3:
+                return None
+            dest = parts[1].strip(',')
+            src = parts[2]
+            return self.sub(dest, src)
+        elif opcode == "JMP":
+            if len(parts) == 2:
+                # Single argument jump (label or offset)
+                return self.jmp(parts[1])
+            elif len(parts) == 3:
+                # Two argument jump (label/offset and condition register)
+                target = parts[1].strip(',')
+                condition = parts[2]
+                return self.jmp(target, condition)
+            return None
+        return None
+
+    def mov(self, dest, src):
+        """Move data between registers and memory"""
+        val = None
         start_time = time()
 
-        if inst == "lb" or inst == "sb":
-            print(f"{line}", end="")
-        arg1 = tokens[1]
-        if len(tokens) == 2 and inst == "li":
-            arg2 = " "
-            self._instructions[inst](arg1, arg2)
-        elif len(tokens) > 2:
-            arg2 = tokens[2]
-            self._instructions[inst](arg1, arg2)
-        else:
-            self._instructions[inst](arg1)
+        # Source is a register
+        if isinstance(src, str) and src.startswith('R'):
+            val = self._registers.read(src)
+            if val is not None:
+                self._logger.log_register_operation("Move", {
+                    "Source": src,
+                    "Destination": dest,
+                    "Value": val
+                })
 
-        self._track_instruction(inst, start_time)
-
-    # load data to register from
-    # memory address
-    def load_b(self, arg1, arg2):
-        address = int(self._registers.read(arg2))
-        data = self._memory.read(address)
-        self._registers.write(arg1, data)
-        if data is not None:
-            print(data)
-
-    # store data in register from
-    # memory address
-    def store(self, arg1, arg2):
-        data = self._registers.read(arg1)
-        address = int(self._registers.read(arg2))
-        self._memory.write(address, data)
-        if data is not None:
-            print(data)
-
-    # load number in register
-    def load_i(self, arg1, arg2):
-        self._registers.write(arg1, arg2)
-
-    # jump instruction used to create
-    # simulation output
-    def jump(self, arg1):
-        if arg1 == "100":
-            data = self._registers.read('r0')
-            if data is not None:
-                self._output += data
+        # Source is a memory location
+        elif isinstance(src, str) and src.startswith('['):
+            addr = src[1:-1]  # Remove brackets
+            if addr.startswith('R'):
+                addr = self._registers.read(addr)
             else:
-                print("- NO DATA")
+                try:
+                    addr = int(addr)
+                except ValueError:
+                    return None
+            val = self._memory.read(addr)
+            if val is not None:
+                self._logger.log_memory_operation("Read", {
+                    "Address": addr,
+                    "Value": val,
+                    "Destination Register": dest
+                })
+
+        # Source is immediate value
         else:
-            print("Jump address not recognized.")
+            try:
+                val = int(src)
+                self._logger.log_register_operation("Move", {
+                    "Source": src,
+                    "Destination": dest,
+                    "Value": val
+                })
+            except ValueError:
+                return None
+
+        # Destination is a register
+        if isinstance(dest, str) and dest.startswith('R'):
+            self._registers.write(dest, val)
+
+        # Destination is a memory location
+        elif isinstance(dest, str) and dest.startswith('['):
+            addr = dest[1:-1]  # Remove brackets
+            if addr.startswith('R'):
+                addr = self._registers.read(addr)
+            else:
+                try:
+                    addr = int(addr)
+                except ValueError:
+                    return None
+            self._memory.write(addr, val)
+            self._logger.log_memory_operation("Write", {
+                "Address": addr,
+                "Value": val,
+                "Source": src,
+                "Destination": dest
+            })
+
+        self._track_instruction("mov", start_time)
+        return val
+
+    def add(self, dest, src):
+        """Add two registers or immediate value"""
+        if src.startswith('R'):
+            val = self._registers.read(src)
+        else:
+            val = int(src)
+
+        dest_val = self._registers.read(dest)
+        result = dest_val + val
+        self._registers.write(dest, result)
+
+        self._debug_info['register_states'].append({
+            'register': dest,
+            'value': result
+        })
+
+    def sub(self, dest, src):
+        """Subtract src from dest"""
+        if src.startswith('R'):
+            val = self._registers.read(src)
+        else:
+            val = int(src)
+
+        dest_val = self._registers.read(dest)
+        result = dest_val - val
+        self._registers.write(dest, result)
+
+        print(f"\n=== Subtraction ===")
+        print(f"Destination Register: {dest}")
+        print(f"Source: {src}")
+        print(f"Original Value: {dest_val}")
+        print(f"Subtracted Value: {val}")
+        print(f"Result: {result}")
+
+        self._debug_info['register_states'].append({
+            'register': dest,
+            'value': result
+        })
 
     # return the cumulative execution time
     # of the registers and memory
@@ -260,7 +384,8 @@ class ISA():
             "instruction_times": self._instruction_times,
             "last_instruction": self._last_instruction_time,
             "pipeline_state": self._pipeline_state,
-            "branch_prediction": self._branch_prediction
+            "branch_prediction": self._branch_prediction,
+            "debug_info": self._debug_info
         }
         return info
 
@@ -311,7 +436,7 @@ class ISA():
         if not isinstance(self._instructions, dict):
             issues.append("Instructions is not a dictionary")
         else:
-            required_instructions = ["lb", "sb", "li", "j"]
+            required_instructions = ["mov", "add", "sub", "jmp"]
             for inst in required_instructions:
                 if inst not in self._instructions:
                     issues.append(f"Missing required instruction: {inst}")
@@ -386,3 +511,84 @@ class ISA():
     def get_last_instruction(self):
         """Return information about the last executed instruction"""
         return self._last_instruction_time
+
+    def jmp(self, target, condition=None):
+        """Jump instruction used to create simulation output or control flow"""
+        print(f"\n=== Jump Debug ===")
+        print(f"Jump target: {target}")
+        print(f"Jump condition register: {condition}")
+        print(f"Current instruction: {self._instruction_pointer}")
+        print(f"R5 (comparison): {self._registers.read('R5')}")
+        print(f"R6 (outer loop): {self._registers.read('R6')}")
+        print(f"R7 (inner loop): {self._registers.read('R7')}")
+        print(f"R0 (current element): {self._registers.read('R0')}")
+        print(f"R1 (previous element): {self._registers.read('R1')}")
+        print(f"R4 (index): {self._registers.read('R4')}")
+
+        # If condition register is provided, check its value
+        if condition and condition.startswith('R'):
+            cond_val = self._registers.read(condition)
+            if cond_val is None:
+                raise ValueError(f"Register {condition} contains no value when used as jump condition")
+            if cond_val <= 0:
+                print(f"Jump condition not met (register {condition} = {cond_val})")
+                return None
+
+        # Special output instruction
+        if target == "100":
+            data = self._registers.read('R0')
+            print(f"Output instruction - R0 value: {data}")
+            if data is not None:
+                self._output += chr(data)
+            return None
+
+        # Label-based jumps
+        if target == "outer_loop":
+            val = self._registers.read('R6')
+            print(f"Outer loop check - R6 value: {val}")
+            if val > 0:
+                print("Jumping to outer_loop")
+                return "outer_loop"
+            else:
+                print("Outer loop complete")
+        elif target == "inner_loop":
+            val = self._registers.read('R7')
+            print(f"Inner loop check - R7 value: {val}")
+            if val > 0:
+                print("Jumping to inner_loop")
+                return "inner_loop"
+            else:
+                print("Inner loop complete")
+        elif target == "no_swap":
+            val = self._registers.read('R5')
+            print(f"Swap check - R5 value: {val}")
+            if val >= 0:
+                print("Skipping swap")
+                return "no_swap"
+            else:
+                print("Performing swap")
+        elif target == "output_loop":
+            val = self._registers.read('R2')
+            print(f"Output loop check - R2 value: {val}")
+            if val > 0:
+                print("Jumping to output_loop")
+                return "output_loop"
+            else:
+                print("Output loop complete")
+        else:
+            # Try to parse target as a numeric offset
+            try:
+                offset = int(target)
+                print(f"Numeric offset jump: {offset}")
+                if condition:
+                    cond_val = self._registers.read(condition)
+                    if cond_val is None:
+                        raise ValueError(f"Register {condition} contains no value when used as jump condition")
+                    if cond_val <= 0:
+                        print(f"Jump condition not met (register {condition} = {cond_val})")
+                        return None
+                self._instruction_pointer += offset
+                return None
+            except ValueError:
+                print(f"Unrecognized jump target: {target}")
+        return None
