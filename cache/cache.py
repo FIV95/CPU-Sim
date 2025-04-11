@@ -221,19 +221,19 @@ class Cache:
     def print_debug_info(self):
         """Print formatted debug information about the cache state"""
         info = self.debug_info()
-        print(f"\n{Fore.CYAN}=== Cache Debug Info: {self._name} ==={Style.RESET_ALL}")
-        print(f"Size: {info['size']} bytes")
-        print(f"Block Size: {info['block_size']} bytes")
-        print(f"Policy: {info['policy']}")
-        print(f"Access Time: {info['access_time']} ns")
-        print(f"Execution Time: {info['exec_time']} ns")
-        print(f"Number of Entries: {info['num_entries']}")
-        print("\nEntries:")
+        self._logger.log(LogLevel.DEBUG, f"\n=== Cache Debug Info: {self._name} ===")
+        self._logger.log(LogLevel.DEBUG, f"Size: {info['size']} bytes")
+        self._logger.log(LogLevel.DEBUG, f"Block Size: {info['block_size']} bytes")
+        self._logger.log(LogLevel.DEBUG, f"Policy: {info['policy']}")
+        self._logger.log(LogLevel.DEBUG, f"Access Time: {info['access_time']} ns")
+        self._logger.log(LogLevel.DEBUG, f"Execution Time: {info['exec_time']} ns")
+        self._logger.log(LogLevel.DEBUG, f"Number of Entries: {info['num_entries']}")
+        self._logger.log(LogLevel.DEBUG, "\nEntries:")
         for entry in info['entries']:
-            print(f"  Address: {entry['address']}, Data: {entry['data']}, Dirty: {entry['dirty']}")
+            self._logger.log(LogLevel.DEBUG, f"  Address: {entry['address']}, Data: {entry['data']}, Dirty: {entry['dirty']}")
         if info['lru_order']:
-            print(f"\nLRU Order: {info['lru_order']}")
-        print(f"Next Level: {info['next_level']}")
+            self._logger.log(LogLevel.DEBUG, f"\nLRU Order: {info['lru_order']}")
+        self._logger.log(LogLevel.DEBUG, f"Next Level: {info['next_level']}")
 
     def validate_state(self):
         """Validate the cache state and return any issues found"""
@@ -272,33 +272,27 @@ class Cache:
         return stats
 
     def print_hierarchy_info(self):
-        """Print comprehensive information about the cache hierarchy."""
-        print(f"\n{Fore.CYAN}=== Cache Level: {self._name} ==={Style.RESET_ALL}")
-        print(f"Configuration:")
-        print(f"  Size: {self._size} bytes")
-        print(f"  Block Size: {self._block_size} bytes")
-        print(f"  Associativity: {self._associativity}")
-        print(f"  Write Policy: {self._write_policy}")
-        print(f"  Access Time: {self._access_time} ns")
-        print(f"  Total Execution Time: {self._exec_time} ns")
-
-        # Print entry statistics
+        """Print information about the cache hierarchy"""
+        self._logger.log(LogLevel.INFO, f"\n=== Cache Hierarchy Analysis ===")
+        self._logger.log(LogLevel.INFO, f"\n=== Cache Level: {self._name} ===")
+        self._logger.log(LogLevel.INFO, "Configuration:")
+        self._logger.log(LogLevel.INFO, f"  Size: {self._size} bytes")
+        self._logger.log(LogLevel.INFO, f"  Block Size: {self._block_size} bytes")
+        self._logger.log(LogLevel.INFO, f"  Associativity: {self._associativity}")
+        self._logger.log(LogLevel.INFO, f"  Write Policy: {self._write_policy}")
+        self._logger.log(LogLevel.INFO, f"  Access Time: {self._access_time} ns")
+        self._logger.log(LogLevel.INFO, f"  Total Execution Time: {self._exec_time} ns")
+        self._logger.log(LogLevel.INFO, "\nEntry Statistics:")
         stats = self.get_entry_stats()
-        print(f"\nEntry Statistics:")
-        print(f"  Total Entries: {stats['total_entries']}")
-        print(f"  Dirty Entries: {stats['dirty_entries']}")
-        print(f"  Clean Entries: {stats['clean_entries']}")
-        if stats['address_range']['min'] is not None:
-            print(f"  Address Range: {stats['address_range']['min']} - {stats['address_range']['max']}")
+        self._logger.log(LogLevel.INFO, f"  Total Entries: {stats['total_entries']}")
+        self._logger.log(LogLevel.INFO, f"  Dirty Entries: {stats['dirty_entries']}")
+        self._logger.log(LogLevel.INFO, f"  Clean Entries: {stats['clean_entries']}")
+        self._logger.log(LogLevel.INFO, f"  Address Range: {stats['address_range']['min']} - {stats['address_range']['max']}")
 
-        # Print next level information if available
         if self._next_level:
-            if hasattr(self._next_level, 'print_hierarchy_info'):
-                self._next_level.print_hierarchy_info()
-            else:
-                print(f"\n{Fore.YELLOW}=== Main Memory ==={Style.RESET_ALL}")
-                print(f"Access Time: {self._next_level.access_time} ns")
-                print(f"Total Execution Time: {self._next_level.exec_time} ns")
+            self._logger.log(LogLevel.INFO, f"\n=== {self._next_level.name} ===")
+            self._logger.log(LogLevel.INFO, f"Access Time: {self._next_level.access_time} ns")
+            self._logger.log(LogLevel.INFO, f"Total Execution Time: {self._next_level.get_exec_time()} ns")
 
     def validate_hierarchy(self):
         """
