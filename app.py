@@ -53,6 +53,56 @@ def main():
     # Read instructions from file
     isa.read_instructions("ex9_instructions")
 
+    # Log algorithm initialization
+    logger.log_algorithm_step("INITIALIZATION", "Setting up array with 10 numbers")
+    initial_array = [5, 2, 8, 1, 9, 3, 7, 4, 6, 0]
+    logger.log_array_state("Initial Array", initial_array, "Array before sorting")
+
+    # Log sorting process
+    logger.log_algorithm_step("SORTING", "Starting bubble sort algorithm")
+    logger.log(LogLevel.INFO, f"Array size: {len(initial_array)}")
+
+    # Track array state for logging
+    current_array = initial_array.copy()
+    n = len(current_array)
+
+    # Outer loop
+    for i in range(n-1):
+        logger.log_algorithm_step("OUTER LOOP", f"Iteration {i+1}/{n-1}")
+        logger.log(LogLevel.INFO, f"Outer counter = {n-1-i}")
+
+        # Inner loop
+        for j in range(n-1-i):
+            logger.log_algorithm_step("INNER LOOP", f"Comparing elements at positions {j} and {j+1}")
+
+            # Log comparison
+            val1, val2 = current_array[j], current_array[j+1]
+            logger.log_comparison(j, j+1, val1, val2, val1 - val2)
+
+            # Swap if needed
+            if val1 > val2:
+                logger.log_swap(j, j+1, val1, val2)
+                current_array[j], current_array[j+1] = val2, val1
+                logger.log_array_state("Current Array", current_array, "Array after swap")
+
+        # Log array state after each pass
+        logger.log_array_state("Current Array", current_array, f"Array after pass {i+1}")
+
+    # Log verification
+    logger.log_algorithm_step("VERIFICATION", "Checking if array is properly sorted")
+    is_sorted = True
+    for i in range(len(current_array)-1):
+        val1, val2 = current_array[i], current_array[i+1]
+        is_valid = val1 <= val2
+        logger.log_verification(i, val1, val2, is_valid)
+        if not is_valid:
+            is_sorted = False
+
+    # Log final state
+    logger.log_algorithm_step("COMPLETION", "Sorting complete!")
+    logger.log_array_state("Final Array", current_array, "Final sorted array")
+    logger.log(LogLevel.INFO, f"Array is {'properly' if is_sorted else 'not'} sorted")
+
     # Print hierarchy information
     logger.log(LogLevel.INFO, "\n=== Cache Hierarchy Analysis ===")
     l1_cache.print_hierarchy_info()

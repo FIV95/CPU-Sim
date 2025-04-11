@@ -16,10 +16,11 @@ class LogLevel(Enum):
 @dataclass
 class Operation:
     """Base class for all loggable operations"""
-    op_type: str
+    type: str  # Unified field for operation type
     description: str
     data: Optional[Dict] = None
     timestamp: float = field(default_factory=time)
+    category: str = "general"  # To categorize different types of operations
 
 @dataclass
 class CacheOperation:
@@ -34,10 +35,8 @@ class CacheOperation:
 @dataclass
 class AlgorithmStep:
     """Algorithm-specific step details"""
-    step_name: str
-    op_type: str
+    step_type: str
     description: str
-    success: bool = True
     data: Optional[Dict] = None
     timestamp: float = field(default_factory=time)
 
@@ -57,10 +56,16 @@ class Logger:
 
         self._operations: List[Operation] = []
         self._cache_stats: Dict[str, Dict[str, int]] = {}
-        self._log_level = LogLevel.INFO
+        self.log_level = LogLevel.INFO
         self._operation_timestamps = []
         self._cache_transitions = []
         self._initialized = True
+
+        self._cache_colors = {
+            'L1Cache': Fore.CYAN,
+            'L2Cache': Fore.MAGENTA,
+            'MainMemory': Fore.GREEN
+        }
 
     @property
     def log_level(self) -> LogLevel:
@@ -89,12 +94,7 @@ class Logger:
 
     def _get_cache_color(self, cache_name: str) -> str:
         """Get color for cache level"""
-        colors = {
-            "L1Cache": Fore.GREEN,
-            "L2Cache": Fore.BLUE,
-            "L3Cache": Fore.MAGENTA
-        }
-        return colors.get(cache_name, Fore.WHITE)
+        return self._cache_colors.get(cache_name, Fore.WHITE)
 
     def _init_cache_stats(self, cache_name: str):
         """Initialize stats for a cache if not already initialized"""
@@ -148,12 +148,15 @@ class Logger:
         details_dict = details if isinstance(details, dict) else {"data": details} if details is not None else None
 
         self._operations.append(
-            CacheOperation(
-                cache_name=cache_name,
-                op_type=op_type,
+            Operation(
+                type=op_type,
                 description=f"{cache_name} {op_type}",
-                hit=hit,
-                data=details_dict
+                data={
+                    "cache_name": cache_name,
+                    "hit": hit,
+                    **(details_dict or {})
+                },
+                category="cache"
             )
         )
 
@@ -232,66 +235,79 @@ class Logger:
         )
 
     # Algorithm logging methods
-    def log_algorithm_step(self, step_type: str, description: str, details: Dict[str, Any] = None):
-        """Log an algorithm step"""
+    def log_algorithm_step(self, step_type: str, description: str, data: Optional[Dict] = None):
+        """Log algorithm step details"""
         if self.should_log(LogLevel.INFO):
-            print(f"\n{Fore.CYAN}{step_type}:{Style.RESET_ALL} {description}")
-            if details:
-                for key, value in details.items():
+            print(f"\n{Fore.YELLOW}=== {step_type} ==={Style.RESET_ALL}")
+            print(f"{description}")
+            if data:
+                for key, value in data.items():
                     print(f"  {key}: {value}")
         self._operations.append(
-            AlgorithmStep(
-                step_name=step_type,
-                op_type="algorithm",
+            Operation(
+                type=step_type,
                 description=description,
-                data=details
+                data=data,
+                category="algorithm"
             )
         )
 
-    def log_array_state(self, array: List, prefix: str = ""):
-        """Log the current state of an array"""
+    def log_array_state(self, array_name: str, elements: List[Any], title: str = "Array State"):
+        """Log array state with pretty formatting"""
         if self.should_log(LogLevel.INFO):
-            print(f"\n{Fore.CYAN}{prefix}:{Style.RESET_ALL}")
-            print(f"{Fore.CYAN}{'-' * 40}{Style.RESET_ALL}")
-            for i, value in enumerate(array):
-                print(f"[{i}] = {value}")
-            print(f"{Fore.CYAN}{'-' * 40}{Style.RESET_ALL}")
+            print(f"\n{Fore.CYAN}=== {title} ==={Style.RESET_ALL}")
+            print("----------------------------------------")
+            for i, elem in enumerate(elements):
+                print(f"[{i}] = {elem}")
+            print("----------------------------------------")
         self._operations.append(
-            AlgorithmStep(
-                op_type="array_state",
-                description=prefix,
-                data={"array": array},
-                step_name="array_display"
+            Operation(
+                type="array_display",
+                description=title,
+                data={"array": elements},
+                category="algorithm"
             )
         )
 
-    def log_comparison(self, index1: int, value1: Any, index2: int, value2: Any):
-        """Log a comparison between two array elements"""
-        if self.should_log(LogLevel.DEBUG):
-            print(f"\n{Fore.YELLOW}Comparing elements:{Style.RESET_ALL}")
-            print(f"[{index1}] = {value1}  vs  [{index2}] = {value2}")
-        self._operations.append(
-            AlgorithmStep(
-                op_type="comparison",
-                description=f"Compare [{index1}]={value1} with [{index2}]={value2}",
-                data={"index1": index1, "value1": value1,
-                      "index2": index2, "value2": value2},
-                step_name="comparison"
-            )
-        )
-
-    def log_swap(self, index1: int, value1: Any, index2: int, value2: Any):
-        """Log a swap operation between two array elements"""
+    def log_comparison(self, pos1: int, pos2: int, val1: Any, val2: Any, result: int):
+        """Log array element comparison"""
         if self.should_log(LogLevel.INFO):
-            print(f"\n{Fore.GREEN}>>> SWAP <<<{Style.RESET_ALL}")
-            print(f"[{index1}] = {value1}  <->  [{index2}] = {value2}")
+            print("\nComparing Elements:")
+            print(f"Position {pos1} and {pos2}")
+            print(f"Values: {val1} and {val2}")
+            print(f"Result: {result}")
         self._operations.append(
-            AlgorithmStep(
-                op_type="swap",
-                description=f"Swap [{index1}]={value1} with [{index2}]={value2}",
-                data={"index1": index1, "value1": value1,
-                      "index2": index2, "value2": value2},
-                step_name="swap"
+            Operation(
+                type="comparison",
+                description=f"Compare elements at positions {pos1} and {pos2}",
+                data={
+                    "pos1": pos1,
+                    "pos2": pos2,
+                    "val1": val1,
+                    "val2": val2,
+                    "result": result
+                },
+                category="algorithm"
+            )
+        )
+
+    def log_swap(self, pos1: int, pos2: int, val1: Any, val2: Any):
+        """Log array element swap"""
+        if self.should_log(LogLevel.INFO):
+            print("\nSwapping Elements:")
+            print(f"Position {pos1} and {pos2}")
+            print(f"Values: {val1} and {val2}")
+        self._operations.append(
+            Operation(
+                type="swap",
+                description=f"Swap elements at positions {pos1} and {pos2}",
+                data={
+                    "pos1": pos1,
+                    "pos2": pos2,
+                    "val1": val1,
+                    "val2": val2
+                },
+                category="algorithm"
             )
         )
 
@@ -330,7 +346,7 @@ class Logger:
 
         # Count operation types
         for op in self._operations:
-            op_type = op.op_type
+            op_type = op.type
             stats["operation_types"][op_type] = stats["operation_types"].get(op_type, 0) + 1
 
         return stats
@@ -377,22 +393,24 @@ class Logger:
 
     # New methods for cache transitions and stats
     def log_cache_transitions(self, cache_name: str, stats: Dict[str, int]):
-        """Log cache transition statistics."""
+        """Log cache transition statistics"""
         if self.should_log(LogLevel.INFO):
-            total_ops = stats['total_ops']
             print(f"\n=== Cache Transition Stats: {cache_name} ===")
-            print(f"Total Operations: {total_ops}")
+            print(f"Total Operations: {stats['total_ops']}")
             print(f"Upward Transitions: {stats['upward_transitions']}")
             print(f"Downward Transitions: {stats['downward_transitions']}")
-            print(f"Upward Transition Rate: {(stats['upward_transitions']/total_ops*100 if total_ops > 0 else 0):.2f}%")
-            print(f"Downward Transition Rate: {(stats['downward_transitions']/total_ops*100 if total_ops > 0 else 0):.2f}%")
+            if stats['total_ops'] > 0:
+                upward_rate = (stats['upward_transitions'] / stats['total_ops']) * 100
+                downward_rate = (stats['downward_transitions'] / stats['total_ops']) * 100
+                print(f"Upward Transition Rate: {upward_rate:.2f}%")
+                print(f"Downward Transition Rate: {downward_rate:.2f}%")
 
         self._operations.append(
             Operation("cache_transitions", f"Cache transitions for {cache_name}", stats)
         )
 
     def log_cache_issues(self, cache_name: str, issues: List[str]):
-        """Log cache state validation issues."""
+        """Log cache state issues"""
         if self.should_log(LogLevel.WARNING):
             print(f"\n=== {cache_name} State Issues ===")
             for issue in issues:
@@ -403,7 +421,7 @@ class Logger:
         )
 
     def log_cache_entries(self, cache_name: str, stats: Dict[str, int]):
-        """Log cache entry statistics."""
+        """Log cache entry statistics"""
         if self.should_log(LogLevel.INFO):
             print(f"\n=== {cache_name} Entry Stats ===")
             print(f"Total entries: {stats['total_entries']}")
@@ -415,7 +433,7 @@ class Logger:
         )
 
     def log_cache_patterns(self, cache_name: str, patterns: Dict[str, float]):
-        """Log cache access pattern statistics."""
+        """Log cache access pattern statistics"""
         if self.should_log(LogLevel.INFO):
             print(f"\n=== {cache_name} Access Patterns ===")
             print(f"Total accesses: {patterns['total_accesses']}")
@@ -554,4 +572,35 @@ class Logger:
 
         self._operations.append(
             Operation("cache_config", f"Configuration for {cache_name}", config)
+        )
+
+    def log_verification(self, pos: Optional[int] = None, val1: Optional[Any] = None, val2: Optional[Any] = None, is_sorted: bool = False):
+        """Log array verification result with optional step details"""
+        if self.should_log(LogLevel.INFO):
+            if pos is not None and val1 is not None and val2 is not None:
+                print(f"\nVerifying position {pos}:")
+                print(f"Values: {val1} and {val2}")
+                print(f"Order is {'correct' if val1 <= val2 else 'incorrect'}")
+            else:
+                print("\nVerification:")
+                print(f"Array is {'sorted' if is_sorted else 'not sorted'}")
+
+        data = {
+            "is_sorted": is_sorted
+        }
+        if pos is not None:
+            data.update({
+                "position": pos,
+                "value1": val1,
+                "value2": val2,
+                "is_valid": val1 <= val2 if val1 is not None and val2 is not None else None
+            })
+
+        self._operations.append(
+            Operation(
+                type="verification",
+                description="Verify array sorting",
+                data=data,
+                category="algorithm"
+            )
         )
