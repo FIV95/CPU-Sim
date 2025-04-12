@@ -1,0 +1,64 @@
+; Simple Bubble Sort
+; Array is stored starting at address 4, each element is 4 bytes
+; Array length is 7
+; Register usage:
+; ecx - array length
+; eax - outer loop counter (i)
+; ebx - inner loop counter (j)
+; edx - temporary for next index and element
+; esi - temporary for current element
+; edi - current address
+
+_start:
+    mov ecx 7          ; array length
+    mov eax 0          ; i = 0 (outer loop counter)
+
+outer_loop:
+    cmp eax ecx        ; if i >= length
+    jge end_sort       ; then end sort
+
+    mov ebx 0          ; j = 0 (inner loop counter)
+
+inner_loop:
+    mov edx ebx        ; get current index
+    add edx 1          ; next index
+    cmp edx ecx        ; if j+1 >= length
+    jge inner_done     ; then inner loop done
+
+    ; Calculate addresses
+    push eax           ; save outer loop counter
+    mov eax ebx        ; current index
+    shl eax 2          ; multiply by 4
+    add eax 4          ; add base address
+    mov edi eax        ; save current address
+
+    mov eax edx        ; next index
+    shl eax 2          ; multiply by 4
+    add eax 4          ; add base address
+    mov esi eax        ; save next address
+
+    ; Compare elements
+    mov edx [esi]      ; get next element
+    mov eax [edi]      ; get current element
+    cmp eax edx        ; compare elements
+    pop eax            ; restore outer loop counter
+    jle no_swap        ; if current <= next, no swap
+
+    ; Perform swap
+    push eax           ; save outer loop counter
+    mov eax [edi]      ; get current element
+    mov [edi] edx      ; store next element in current position
+    mov [esi] eax      ; store current element in next position
+    pop eax            ; restore outer loop counter
+
+no_swap:
+    add ebx 1          ; j++
+    cmp ebx ecx        ; compare j with length-1
+    jl inner_loop      ; continue if j < length-1
+
+inner_done:
+    add eax 1          ; i++
+    jmp outer_loop     ; continue outer loop
+
+end_sort:
+    halt

@@ -1,191 +1,335 @@
 from .policies import ReplacementPolicy
 from utils.logger import Logger, LogLevel
 from colorama import Fore, Style
+import random
+from time import time
+
+class DEBUG:
+    ENABLED = True  # Enable cache debug messages
+    VERBOSE = True  # Enable verbose mode for detailed debugging
+
+    @staticmethod
+    def log(msg, verbose=False):
+        """Log message if enabled and either verbose mode is on or message is marked as not verbose"""
+        if DEBUG.ENABLED and (DEBUG.VERBOSE or not verbose):
+            print(f"[CACHE DEBUG] {msg}")
+
+    @staticmethod
+    def set_enabled(enabled):
+        """Enable or disable debug logging"""
+        DEBUG.ENABLED = enabled
+
+    @staticmethod
+    def set_verbose(verbose):
+        """Enable or disable verbose logging"""
+        DEBUG.VERBOSE = verbose
 
 class Cache:
-    def __init__(self, name, size, associativity, block_size, access_time, policy, next_level=None, logger=None):
-        """Initialize a cache with the given parameters.
-
-        Args:
-            name (str): Name of the cache (e.g., 'L1Cache', 'L2Cache')
-            size (int): Total size of the cache in bytes
-            associativity (int): Number of ways in each set
-            block_size (int): Size of each cache block in bytes
-            access_time (float): Time taken to access this cache
-            policy (str): Cache write policy ('write-through' or 'write-back')
-            next_level (Cache or MainMemory, optional): Next level in memory hierarchy
-            logger (Logger, optional): Logger instance for debugging
-        """
+    def __init__(self, name, size, line_size, associativity, access_time=10, write_policy="write-back", next_level=None, logger=None):
+        """Initialize cache with given parameters"""
         self._name = name
         self._size = size
+        self._line_size = line_size
         self._associativity = associativity
-        self._block_size = block_size
         self._access_time = access_time
-        self._policy = policy
-        self._write_policy = policy  # Set write policy from input
-        self._write_allocate = True if policy == 'write-back' else False  # Write-back implies write-allocate
+        self._write_policy = write_policy
         self._next_level = next_level
-        self._logger = logger or Logger()  # Use provided logger or create new one
+        self._logger = logger if logger else Logger()
+        self._sets = size // (line_size * associativity)
+        self._entries = [[] for _ in range(self._sets)]
+        self._access_count = 0
+        self._hit_count = 0
+        self._miss_count = 0
+        self._total_access_time = 0
+        self._min_access_time = float('inf')
+        self._max_access_time = 0
         self._exec_time = 0
-        self._entries = []
-        self._lru_order = []  # Track order of access for LRU policy
-        self._data_flow = []  # Track data flow history
-        self._policies = {
-            "random": ReplacementPolicy.random,
-            "fifo": ReplacementPolicy.fifo,
-            "lru": ReplacementPolicy.lru
-        }
+        self._data_flow = []
+        self._last_access_time = 0
+        self._object_size = 32  # Size of Python objects in bytes
 
-    # Accessors
-    @property
-    def name(self):
-        return self._name
+    def set_next_level(self, next_level):
+        """Set the next level in the memory hierarchy"""
+        self._next_level = next_level
 
-    @property
-    def size(self):
-        return self._size
-
-    @property
-    def block_size(self):
-        return self._block_size
-
-    @property
-    def policy(self):
-        return self._policy
-
-    @property
-    def access_time(self):
-        return self._access_time
-
-    @property
-    def exec_time(self):
-        return self._exec_time
-
-    @property
-    def entries(self):
-        return self._entries
-
-    @property
-    def lru_order(self):
-        return self._lru_order
-
-    @property
-    def next_level(self):
-        return self._next_level
-
-    @property
-    def logger(self):
-        return self._logger
-
-    # Mutators
-    @name.setter
-    def name(self, value):
-        self._name = value
-
-    @size.setter
-    def size(self, value):
-        self._size = value
-
-    @block_size.setter
-    def block_size(self, value):
-        self._block_size = value
-
-    @policy.setter
-    def policy(self, value):
-        if value in self._policies:
-            self._policy = value
-        else:
-            raise ValueError(f"Invalid policy. Must be one of: {list(self._policies.keys())}")
-
-    @access_time.setter
-    def access_time(self, value):
-        if value >= 0:
-            self._access_time = value
-        else:
-            raise ValueError("Access time must be non-negative")
-
-    @next_level.setter
-    def next_level(self, value):
-        self._next_level = value
-
-    @logger.setter
-    def logger(self, value):
-        self._logger = value
-
-    def write(self, address, data):
-        """Write data to cache and handle cache misses"""
-        self._exec_time += self._access_time
-        entry = self.get_entry(address)
-        next_level_data = None
-
-        if entry is not None:
-            entry["data"] = data
-            entry["dirty"] = True
-            if self._policy == "lru":
-                self._lru_order.remove(entry)
-                self._lru_order.append(entry)
-            self._logger.log_cache_operation(self._name, "write", True, data)
-        else:
-            self._logger.log_cache_operation(self._name, "write", False, data)
-            if len(self._entries) >= self._size:
-                self.replace_entry(address)
-            else:
-                self._entries.append({"address": address, "data": data, "dirty": True})
-                if self._policy == "lru":
-                    self._lru_order.append(self._entries[-1])
-
-        # Write through to next level
-        if self._next_level:
-            next_level_data = data
-            self._next_level.write(address, data)
+    def read(self, address, output=True):
+        """Read data from cache"""
+        start_time = time()
 
         # Track data flow
-        self.track_data_flow('write', address, data, next_level_data)
+        self._data_flow.append({
+            'operation': 'read',
+            'address': address,
+            'time': start_time
+        })
 
-    def read(self, address):
-        """Read data from cache and handle cache misses"""
-        self._exec_time += self._access_time
-        entry = self.get_entry(address)
-        next_level_data = None
+        # Calculate set index and tag
+        set_index = ((address // self._object_size) // (self._line_size // self._object_size)) % self._sets
+        tag = address // (self._line_size * self._sets)
 
-        if entry is not None:
-            if self._policy == "lru":
-                self._lru_order.remove(entry)
-                self._lru_order.append(entry)
-            self._logger.log_cache_operation(self._name, "read", True, entry["data"])
-            self.track_data_flow('read', address, entry["data"], None)
-            return entry["data"]
-        else:
-            self._logger.log_cache_operation(self._name, "read", False)
-            if len(self._entries) >= self._size:
-                self.replace_entry(address)
-            else:
-                self._entries.append({"address": address, "data": None, "dirty": False})
-                if self._policy == "lru":
-                    self._lru_order.append(self._entries[-1])
+        # Log operation start
+        if output:
+            self._logger.log(LogLevel.DEBUG, f"Cache read: address={address}, set={set_index}, tag={tag}")
 
-            # Read from next level
-            data = None
-            if self._next_level:
-                data = self._next_level.read(address)
-                self._entries[-1]["data"] = data
-                next_level_data = data
-                self._logger.log_cache_operation(self._name, "read", False, data)
+        # Check for hit
+        for entry in self._entries[set_index]:
+            if entry["tag"] == tag and entry["valid"]:
+                # Cache hit
+                self._hit_count += 1
+                if output:
+                    self._logger.log(LogLevel.DEBUG, f"Cache hit: found entry with tag {tag}")
 
-            # Track data flow
-            self.track_data_flow('read', address, data, next_level_data)
-            return data
+                # Update LRU order
+                self._update_lru(set_index, entry)
+
+                # Calculate access time and update statistics
+                access_time = time() - start_time
+                self._exec_time += access_time
+                self._update_stats(access_time)
+
+                if output:
+                    self._log_stats()
+
+                # Ensure data is returned as integer
+                return int(entry["data"])
+
+        # Cache miss
+        self._miss_count += 1
+        if output:
+            self._logger.log(LogLevel.DEBUG, f"Cache miss: no valid entry with tag {tag}")
+
+        # Get data from next level
+        if self._next_level:
+            data = self._next_level.read(address)
+            if data is not None:
+                # Create new entry
+                new_entry = {
+                    "tag": tag,
+                    "data": int(data),  # Ensure data is stored as integer
+                    "valid": True,
+                    "dirty": False,
+                    "lru": 0
+                }
+
+                # Handle set full condition
+                if len(self._entries[set_index]) >= self._associativity:
+                    # Find LRU entry to replace
+                    lru_entry = min(self._entries[set_index], key=lambda x: x["lru"])
+                    if lru_entry["dirty"] and self._write_policy == "write-back":
+                        # Write back dirty data
+                        if output:
+                            self._logger.log(LogLevel.DEBUG, f"Writing back dirty data for tag {lru_entry['tag']}")
+                        # Calculate old address from tag and set index
+                        old_address = lru_entry["tag"] * (self._line_size * self._sets) + (set_index * self._line_size)
+                        self._next_level.write(old_address, lru_entry["data"])  # Write back old data at old address
+                    self._entries[set_index].remove(lru_entry)
+
+                # Add new entry
+                self._entries[set_index].append(new_entry)
+                self._update_lru(set_index, new_entry)
+
+                # Calculate access time and update statistics
+                access_time = time() - start_time
+                self._exec_time += access_time
+                self._update_stats(access_time)
+
+                if output:
+                    self._log_stats()
+
+                return int(data)  # Ensure data is returned as integer
+
+        return None
+
+    def write(self, address, data, output=True):
+        """Write data to cache"""
+        start_time = time()
+
+        # Ensure data is integer
+        data = int(data)
+
+        # Track data flow
+        self._data_flow.append({
+            'operation': 'write',
+            'address': address,
+            'data': data,
+            'time': start_time
+        })
+
+        # Calculate set index and tag
+        set_index = ((address // self._object_size) // (self._line_size // self._object_size)) % self._sets
+        tag = address // (self._line_size * self._sets)
+
+        # Log operation start
+        if output:
+            self._logger.log(LogLevel.DEBUG, f"Cache write: address={address}, data={data}, set={set_index}, tag={tag}")
+
+        # Check for hit
+        for entry in self._entries[set_index]:
+            if entry["tag"] == tag and entry["valid"]:
+                # Cache hit
+                self._hit_count += 1
+                if output:
+                    self._logger.log(LogLevel.DEBUG, f"Cache hit: updating entry with tag {tag}")
+
+                # Update data and mark as dirty
+                entry["data"] = data
+                entry["dirty"] = True
+
+                # Update LRU order
+                self._update_lru(set_index, entry)
+
+                # Handle write-through policy
+                if self._write_policy == "write-through" and self._next_level:
+                    if output:
+                        self._logger.log(LogLevel.DEBUG, "Write-through: writing to next level")
+                    self._next_level.write(address, data)
+
+                # Calculate access time and update statistics
+                access_time = time() - start_time
+                self._exec_time += access_time
+                self._update_stats(access_time)
+
+                if output:
+                    self._log_stats()
+
+                return True
+
+        # Cache miss
+        self._miss_count += 1
+        if output:
+            self._logger.log(LogLevel.DEBUG, f"Cache miss: no valid entry with tag {tag}")
+
+        # Create new entry
+        new_entry = {
+            "tag": tag,
+            "data": data,
+            "valid": True,
+            "dirty": True if self._write_policy == "write-back" else False,
+            "lru": 0
+        }
+
+        # Handle set full condition
+        if len(self._entries[set_index]) >= self._associativity:
+            # Find LRU entry to replace
+            lru_entry = min(self._entries[set_index], key=lambda x: x["lru"])
+            if lru_entry["dirty"] and self._write_policy == "write-back":
+                # Write back dirty data
+                if output:
+                    self._logger.log(LogLevel.DEBUG, f"Writing back dirty data for tag {lru_entry['tag']}")
+                # Calculate old address from tag and set index
+                old_address = lru_entry["tag"] * (self._line_size * self._sets) + (set_index * self._line_size)
+                self._next_level.write(old_address, lru_entry["data"])  # Write back old data at old address
+            self._entries[set_index].remove(lru_entry)
+
+        # Add new entry
+        self._entries[set_index].append(new_entry)
+        self._update_lru(set_index, new_entry)
+
+        # Handle write-through policy
+        if self._write_policy == "write-through" and self._next_level:
+            if output:
+                self._logger.log(LogLevel.DEBUG, "Write-through: writing to next level")
+            self._next_level.write(address, data)
+
+        # Calculate access time and update statistics
+        access_time = time() - start_time
+        self._exec_time += access_time
+        self._update_stats(access_time)
+
+        if output:
+            self._log_stats()
+
+        return True
+
+    def _update_lru(self, set_index, entry):
+        """Update LRU counters for a set"""
+        # Decrease all other entries' LRU values
+        for e in self._entries[set_index]:
+            if e != entry:
+                e["lru"] = max(0, e["lru"] - 1)
+
+        # Set the accessed entry to the highest LRU value
+        entry["lru"] = self._associativity - 1
+
+    def _update_stats(self, access_time):
+        """Update cache statistics"""
+        self._access_count += 1
+        self._total_access_time += access_time
+        self._min_access_time = min(self._min_access_time, access_time)
+        self._max_access_time = max(self._max_access_time, access_time)
+        self._last_access_time = access_time
+
+    def _log_stats(self):
+        """Log cache statistics"""
+        self._logger.log(LogLevel.DEBUG, f"Cache stats: hits={self._hit_count}, misses={self._miss_count}, "
+                        f"hit_rate={self._hit_count/self._access_count if self._access_count > 0 else 0:.2%}")
+
+    def get_performance_stats(self):
+        """Get cache performance statistics"""
+        return {
+            "access_count": self._access_count,
+            "hit_count": self._hit_count,
+            "miss_count": self._miss_count,
+            "hit_rate": self._hit_count / self._access_count if self._access_count > 0 else 0,
+            "miss_rate": self._miss_count / self._access_count if self._access_count > 0 else 0,
+            "total_access_time": self._total_access_time,
+            "min_access_time": self._min_access_time,
+            "max_access_time": self._max_access_time,
+            "avg_access_time": self._total_access_time / self._access_count if self._access_count > 0 else 0,
+            "exec_time": self._exec_time
+        }
+
+    def debug_info(self):
+        """Get debug information about cache state"""
+        return {
+            "name": self._name,
+            "size": self._size,
+            "line_size": self._line_size,
+            "associativity": self._associativity,
+            "sets": self._sets,
+            "write_policy": self._write_policy,
+            "performance_stats": self.get_performance_stats(),
+            "entries": len([entry for entries in self._entries for entry in entries]),
+            "dirty_entries": len([entry for entries in self._entries for entry in entries if entry["dirty"]])
+        }
+
+    def print_debug_info(self):
+        """Print formatted debug information"""
+        info = self.debug_info()
+        self._logger.log(LogLevel.DEBUG, f"\n=== {self._name} Debug Info ===")
+        self._logger.log(LogLevel.DEBUG, f"Size: {info['size']} bytes")
+        self._logger.log(LogLevel.DEBUG, f"Line Size: {info['line_size']} bytes")
+        self._logger.log(LogLevel.DEBUG, f"Associativity: {info['associativity']}-way")
+        self._logger.log(LogLevel.DEBUG, f"Sets: {info['sets']}")
+        self._logger.log(LogLevel.DEBUG, f"Write Policy: {info['write_policy']}")
+        self._logger.log(LogLevel.DEBUG, f"Total Entries: {info['entries']}")
+        self._logger.log(LogLevel.DEBUG, f"Dirty Entries: {info['dirty_entries']}")
+
+        perf_stats = info['performance_stats']
+        self._logger.log(LogLevel.DEBUG, "\nPerformance Statistics:")
+        self._logger.log(LogLevel.DEBUG, f"  Access Count: {perf_stats['access_count']}")
+        self._logger.log(LogLevel.DEBUG, f"  Hit Rate: {perf_stats['hit_rate']:.2%}")
+        self._logger.log(LogLevel.DEBUG, f"  Miss Rate: {perf_stats['miss_rate']:.2%}")
+        self._logger.log(LogLevel.DEBUG, f"  Execution Time: {perf_stats['exec_time']:.6f}s")
+
+    def get_exec_time(self):
+        """Get total execution time"""
+        return self._exec_time
 
     def replace_entry(self, address):
         """Replace a cache entry using the specified policy"""
+        DEBUG.log(f"{self._name} replacing entry for addr={address}")
         if self._policy in self._policies:
-            # Write back dirty data before replacement
+            # Write back dirty data before replacement if using write-back policy
             old_entry = self._entries[0] if self._policy == "fifo" else self._lru_order[0]
-            if old_entry.get("dirty", False) and self._next_level:
+            if self._write_policy == "write-back" and old_entry.get("dirty", False) and self._next_level:
+                DEBUG.log(f"{self._name} writing back dirty entry: addr={old_entry['address']}, data={old_entry['data']}")
                 self._next_level.write(old_entry["address"], old_entry["data"])
+                old_entry["dirty"] = False
 
             # Apply replacement policy
             self._policies[self._policy](self, address)
+            DEBUG.log(f"{self._name} replacement complete")
 
     def get_entry(self, address):
         """Get cache entry for given address"""
@@ -194,214 +338,122 @@ class Cache:
                 return entry
         return None
 
-    def get_exec_time(self):
-        """Get total execution time including next level memory"""
-        total_time = self._exec_time
-        if self._next_level:
-            total_time += self._next_level.get_exec_time()
-        return total_time
-
-    # Debugging methods
-    def debug_info(self):
-        """Return detailed debug information about the cache state"""
-        info = {
-            "name": self._name,
-            "size": self._size,
-            "block_size": self._block_size,
-            "policy": self._policy,
-            "access_time": self._access_time,
-            "exec_time": self._exec_time,
-            "num_entries": len(self._entries),
-            "entries": self._entries,
-            "lru_order": [entry["address"] for entry in self._lru_order] if self._policy == "lru" else None,
-            "next_level": self._next_level.name if self._next_level else None
-        }
-        return info
-
-    def print_debug_info(self):
-        """Print formatted debug information about the cache state"""
-        info = self.debug_info()
-        self._logger.log(LogLevel.DEBUG, f"\n=== Cache Debug Info: {self._name} ===")
-        self._logger.log(LogLevel.DEBUG, f"Size: {info['size']} bytes")
-        self._logger.log(LogLevel.DEBUG, f"Block Size: {info['block_size']} bytes")
-        self._logger.log(LogLevel.DEBUG, f"Policy: {info['policy']}")
-        self._logger.log(LogLevel.DEBUG, f"Access Time: {info['access_time']} ns")
-        self._logger.log(LogLevel.DEBUG, f"Execution Time: {info['exec_time']} ns")
-        self._logger.log(LogLevel.DEBUG, f"Number of Entries: {info['num_entries']}")
-        self._logger.log(LogLevel.DEBUG, "\nEntries:")
-        for entry in info['entries']:
-            self._logger.log(LogLevel.DEBUG, f"  Address: {entry['address']}, Data: {entry['data']}, Dirty: {entry['dirty']}")
-        if info['lru_order']:
-            self._logger.log(LogLevel.DEBUG, f"\nLRU Order: {info['lru_order']}")
-        self._logger.log(LogLevel.DEBUG, f"Next Level: {info['next_level']}")
-
-    def validate_state(self):
-        """Validate the cache state and return any issues found"""
-        issues = []
-
-        # Check if number of entries exceeds size
-        if len(self._entries) > self._size:
-            issues.append(f"Number of entries ({len(self._entries)}) exceeds cache size ({self._size})")
-
-        # Check LRU order consistency
-        if self._policy == "lru":
-            if len(self._lru_order) != len(self._entries):
-                issues.append(f"LRU order length ({len(self._lru_order)}) doesn't match entries length ({len(self._entries)})")
-            for entry in self._lru_order:
-                if entry not in self._entries:
-                    issues.append(f"LRU order contains entry not in cache: {entry}")
-
-        # Check for duplicate addresses
-        addresses = [entry["address"] for entry in self._entries]
-        if len(addresses) != len(set(addresses)):
-            issues.append("Duplicate addresses found in cache entries")
-
-        return issues
-
-    def get_entry_stats(self):
-        """Return statistics about cache entries"""
-        stats = {
-            "total_entries": len(self._entries),
-            "dirty_entries": sum(1 for entry in self._entries if entry["dirty"]),
-            "clean_entries": sum(1 for entry in self._entries if not entry["dirty"]),
-            "address_range": {
-                "min": min(entry["address"] for entry in self._entries) if self._entries else None,
-                "max": max(entry["address"] for entry in self._entries) if self._entries else None
-            }
-        }
-        return stats
-
-    def print_hierarchy_info(self):
-        """Print information about the cache hierarchy"""
-        self._logger.log(LogLevel.INFO, f"\n=== Cache Hierarchy Analysis ===")
-        self._logger.log(LogLevel.INFO, f"\n=== Cache Level: {self._name} ===")
-        self._logger.log(LogLevel.INFO, "Configuration:")
-        self._logger.log(LogLevel.INFO, f"  Size: {self._size} bytes")
-        self._logger.log(LogLevel.INFO, f"  Block Size: {self._block_size} bytes")
-        self._logger.log(LogLevel.INFO, f"  Associativity: {self._associativity}")
-        self._logger.log(LogLevel.INFO, f"  Write Policy: {self._write_policy}")
-        self._logger.log(LogLevel.INFO, f"  Access Time: {self._access_time} ns")
-        self._logger.log(LogLevel.INFO, f"  Total Execution Time: {self._exec_time} ns")
-        self._logger.log(LogLevel.INFO, "\nEntry Statistics:")
-        stats = self.get_entry_stats()
-        self._logger.log(LogLevel.INFO, f"  Total Entries: {stats['total_entries']}")
-        self._logger.log(LogLevel.INFO, f"  Dirty Entries: {stats['dirty_entries']}")
-        self._logger.log(LogLevel.INFO, f"  Clean Entries: {stats['clean_entries']}")
-        self._logger.log(LogLevel.INFO, f"  Address Range: {stats['address_range']['min']} - {stats['address_range']['max']}")
-
-        if self._next_level:
-            self._logger.log(LogLevel.INFO, f"\n=== {self._next_level.name} ===")
-            self._logger.log(LogLevel.INFO, f"Access Time: {self._next_level.access_time} ns")
-            self._logger.log(LogLevel.INFO, f"Total Execution Time: {self._next_level.get_exec_time()} ns")
-
-    def validate_hierarchy(self):
-        """
-        Validates the entire cache hierarchy by checking data consistency and coherence.
-
-        Returns:
-            list: A list of validation issues found in the hierarchy.
-        """
-        issues = []
-
-        # First validate this cache's state
-        state_issues = self.validate_state()
-        issues.extend(state_issues)
-
-        # Check data consistency with next level if it exists and is a cache
-        if self._next_level and isinstance(self._next_level, Cache):
-            # For each entry in this cache
-            for entry in self._entries:
-                if entry.get("data") is not None:
-                    address = entry["address"]
-                    data = entry["data"]
-
-                    # Find corresponding data in next level
-                    next_level_data = self._next_level.read(address)
-
-                    if next_level_data is None:
-                        issues.append(f"Data at address {address} in {self._name} not found in {self._next_level._name}")
-                    elif data != next_level_data:
-                        issues.append(f"Data inconsistency at address {address} between {self._name} and {self._next_level._name}")
-
-            # Recursively validate next level
-            next_level_issues = self._next_level.validate_hierarchy()
-            issues.extend(next_level_issues)
-
-        return issues
-
-    def track_data_flow(self, operation, address, data=None, next_level_data=None):
-        """
-        Track data flow through the cache hierarchy.
-
-        Args:
-            operation (str): The operation being performed ('read' or 'write')
-            address (int): The memory address being accessed
-            data (int, optional): The data being written or read
-            next_level_data (int, optional): Data from the next level cache/memory
-        """
-        # Calculate block address and offset
-        block_addr = address // self._block_size
-        offset = address % self._block_size
-
-        # Calculate set index and tag
-        set_index = block_addr % (self._size // (self._block_size * self._associativity))
-        tag = block_addr // (self._size // (self._block_size * self._associativity))
-
-        # Create flow entry
-        flow_entry = {
-            'operation': operation,
-            'address': address,
-            'data': data,
-            'block_addr': block_addr,
-            'set_index': set_index,
-            'tag': tag,
-            'offset': offset,
-            'cache_name': self._name,
-            'next_level_data': next_level_data
-        }
-
-        # Add to data flow history
-        self._data_flow.append(flow_entry)
-
-        # Track in next level if it exists and is a cache
-        if self._next_level and isinstance(self._next_level, Cache):
-            self._next_level.track_data_flow(operation, address, data, next_level_data)
-
     def get_access_patterns(self):
-        patterns = {
-            'total_accesses': len(self._data_flow),
-            'sequential_accesses': 0,
-            'random_accesses': 0,
-            'repeated_accesses': 0,
-            'sequential_rate': 0.0,
-            'random_rate': 0.0,
-            'repeated_rate': 0.0
+        """Analyze access patterns from data flow"""
+        if not self._data_flow:
+            return {
+                'total_accesses': 0,
+                'sequential_accesses': 0,
+                'random_accesses': 0,
+                'repeated_accesses': 0,
+                'sequential_rate': 0.0,
+                'random_rate': 0.0,
+                'repeated_rate': 0.0
+            }
+
+        total = len(self._data_flow)
+        sequential = 0
+        random = 0
+        repeated = set()
+        prev_addr = None
+
+        for i, access in enumerate(self._data_flow):
+            curr_addr = access['address']
+
+            # Check for repeated accesses
+            if curr_addr in repeated:
+                repeated.add(curr_addr)
+
+            # Check for sequential vs random access
+            if prev_addr is not None:
+                if curr_addr == prev_addr + 1:
+                    sequential += 1
+                else:
+                    random += 1
+
+            prev_addr = curr_addr
+
+        return {
+            'total_accesses': total,
+            'sequential_accesses': sequential,
+            'random_accesses': random,
+            'repeated_accesses': len(repeated),
+            'sequential_rate': (sequential / (total - 1)) * 100 if total > 1 else 0.0,
+            'random_rate': (random / (total - 1)) * 100 if total > 1 else 0.0,
+            'repeated_rate': (len(repeated) / total) * 100
         }
 
-        if len(self._data_flow) > 1:
-            seen_addresses = set()
+    def write_back_all(self):
+        """Write back all dirty entries to the next level"""
+        self._logger.log(LogLevel.DEBUG, f"\n=== Write-back operation for {self._name} ===")
+        self._logger.log(LogLevel.DEBUG, "Cache state before write-back:")
+        self._logger.log(LogLevel.DEBUG, f"Total entries: {sum(len(entries) for entries in self._entries)}")
+        dirty_count = sum(1 for entries in self._entries for entry in entries if entry.get("dirty", False))
+        self._logger.log(LogLevel.DEBUG, f"Dirty entries: {dirty_count}")
+        self._logger.log(LogLevel.DEBUG, f"Clean entries: {sum(len(entries) for entries in self._entries) - dirty_count}")
 
-            for i in range(len(self._data_flow)):
-                curr_addr = self._data_flow[i]['address']
+        # Write back all dirty entries
+        for set_index, entries in enumerate(self._entries):
+            for entry in entries:
+                if entry.get("dirty", False):
+                    # Calculate address from tag and set index
+                    address = entry["tag"] * (self._line_size * self._sets) + (set_index * self._line_size)
 
-                # Check for repeated access
-                if curr_addr in seen_addresses:
-                    patterns['repeated_accesses'] += 1
-                seen_addresses.add(curr_addr)
+                    self._logger.log(LogLevel.DEBUG, f"\nWriting back dirty entry:")
+                    self._logger.log(LogLevel.DEBUG, f"  Address: {address}")
+                    self._logger.log(LogLevel.DEBUG, f"  Data: {entry['data']}")
+                    self._logger.log(LogLevel.DEBUG, f"  Dirty: {entry['dirty']}")
 
-                # Check for sequential vs random access
-                if i > 0:
-                    prev_addr = self._data_flow[i-1]['address']
-                    if curr_addr == prev_addr + 1:
-                        patterns['sequential_accesses'] += 1
-                    else:
-                        patterns['random_accesses'] += 1
+                    try:
+                        # Write to next level
+                        if self._next_level:
+                            self._logger.log(LogLevel.DEBUG, f"  Writing to next level: {self._next_level._name}")
+                            self._next_level.write(address, entry["data"])
+                            self._logger.log(LogLevel.DEBUG, "  Write successful")
+                        else:
+                            # If no next level, write directly to main memory
+                            self._logger.log(LogLevel.DEBUG, "  No next level, writing to main memory")
+                            # Get main memory from the memory hierarchy
+                            memory = self._get_main_memory()
+                            if memory:
+                                memory.write(address, entry["data"])
+                                self._logger.log(LogLevel.DEBUG, "  Write successful")
+                            else:
+                                self._logger.log(LogLevel.ERROR, "  No main memory found in hierarchy")
 
-            # Calculate rates
-            total_transitions = len(self._data_flow) - 1
-            if total_transitions > 0:
-                patterns['sequential_rate'] = (patterns['sequential_accesses'] / total_transitions) * 100
-                patterns['random_rate'] = (patterns['random_accesses'] / total_transitions) * 100
-                patterns['repeated_rate'] = (patterns['repeated_accesses'] / len(self._data_flow)) * 100
+                        # Mark as clean
+                        entry["dirty"] = False
+                        self._logger.log(LogLevel.DEBUG, "  Entry marked as clean")
+                    except Exception as e:
+                        self._logger.log(LogLevel.ERROR, f"  Error writing back entry: {str(e)}")
+                        import traceback
+                        self._logger.log(LogLevel.ERROR, f"  Stack trace: {traceback.format_exc()}")
 
-        return patterns
+        # Log final cache state
+        self._logger.log(LogLevel.DEBUG, "\nCache state after write-back:")
+        self._logger.log(LogLevel.DEBUG, f"Total entries: {sum(len(entries) for entries in self._entries)}")
+        dirty_count = sum(1 for entries in self._entries for entry in entries if entry.get("dirty", False))
+        self._logger.log(LogLevel.DEBUG, f"Dirty entries: {dirty_count}")
+        self._logger.log(LogLevel.DEBUG, f"Clean entries: {sum(len(entries) for entries in self._entries) - dirty_count}")
+        self._logger.log(LogLevel.DEBUG, "=== Write-back operation complete ===\n")
+
+    def _get_main_memory(self):
+        """Traverse the cache hierarchy to find the main memory"""
+        current = self._next_level
+        while current:
+            if not current._next_level:
+                return current
+            current = current._next_level
+        return None
+
+    def get_addresses(self):
+        """Return a list of all valid addresses currently in the cache."""
+        addresses = []
+        for entry in self._entries:
+            if isinstance(entry, list):  # Handle set-associative entries
+                for line in entry:
+                    if line and line.get('valid', False):
+                        addresses.append(line.get('address'))
+            elif entry and entry.get('valid', False):  # Handle direct-mapped entries
+                addresses.append(entry.get('address'))
+        return addresses
