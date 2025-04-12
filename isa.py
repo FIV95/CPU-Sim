@@ -25,6 +25,7 @@ class InstructionType(Enum):
     NOT = auto()    # Bitwise NOT
     AND = auto()    # Bitwise AND
     OR = auto()     # Bitwise OR
+    XOR = auto()    # Bitwise XOR
     JMP = auto()    # Unconditional jump
     JZ = auto()     # Jump if zero
     JNZ = auto()    # Jump if not zero
@@ -145,6 +146,8 @@ class SimpleISA:
                 self._execute_and(instruction.operands)
             elif instruction.type == InstructionType.OR:
                 self._execute_or(instruction.operands)
+            elif instruction.type == InstructionType.XOR:
+                self._execute_xor(instruction.operands)
             elif instruction.type == InstructionType.JMP:
                 next_pc = self._execute_jmp(instruction.operands)
             elif instruction.type == InstructionType.JZ:
@@ -356,6 +359,51 @@ class SimpleISA:
             'value': result,
             'source': src
         })
+
+    def _execute_xor(self, operands: List[str]) -> None:
+        """Execute XOR instruction"""
+        if len(operands) != 2:
+            raise ValueError("XOR requires 2 operands")
+
+        dest, src = operands
+
+        # Get source value
+        if src.startswith('#'):
+            src_val = int(src[1:])
+        elif src.startswith('['):
+            addr = self._evaluate_address(src[1:-1])
+            src_val = self.cache.read(addr) if self.cache else self.memory.read(addr)
+        else:
+            if src not in self.registers:
+                raise ValueError(f"Invalid source register: {src}")
+            src_val = self.registers[src]
+
+        # Get destination value and perform XOR
+        if dest.startswith('['):
+            # Memory operation
+            addr = self._evaluate_address(dest[1:-1])
+            dest_val = self.cache.read(addr) if self.cache else self.memory.read(addr)
+            result = dest_val ^ src_val
+            if self.cache:
+                self.cache.write(addr, result)
+            self.memory.write(addr, result)
+            self.logger.log_register_operation('xor', {
+                'dest': f"Memory[{addr}]",
+                'value': result,
+                'source': src
+            })
+        else:
+            # Register operation
+            if dest not in self.registers:
+                raise ValueError(f"Invalid destination register: {dest}")
+            dest_val = self.registers[dest]
+            result = dest_val ^ src_val
+            self.registers[dest] = result
+            self.logger.log_register_operation('xor', {
+                'dest': dest,
+                'value': result,
+                'source': src
+            })
 
     def _execute_jmp(self, operands: List[str]) -> int:
         """Execute JMP instruction"""

@@ -60,6 +60,12 @@ OR esi #18     ; esi = 54 (0b110110)
 MOV edi #5     ; edi = 5 (0b00101)
 OR edi esi     ; edi = 55 (0b110111)
 
+; Test XOR instructions
+MOV esi #42    ; esi = 42 (0b101010)
+XOR esi #21    ; esi = 63 (0b111111)
+MOV edi #15    ; edi = 15 (0b001111)
+XOR edi esi    ; edi = 48 (0b110000)
+
 ; Loop to demonstrate jumps
 loop_start:
     ADD ecx #1     ; Increment counter

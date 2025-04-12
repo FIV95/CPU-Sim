@@ -1,0 +1,38 @@
+;===============================================
+; Test Name: XOR Instruction Test
+; Description: Tests the XOR instruction functionality including:
+;   - Register to register XOR operations
+;   - Immediate value XOR operations
+;   - Memory XOR operations
+;   - Bitwise operations verification
+;
+; Expected Results:
+;   - Final register values:
+;     * eax = 15 (0b1111, result of 10 XOR 5)
+;     * ebx = 3  (0b0011, result of 12 XOR 15)
+;     * ecx = 15 (0b1111, unchanged)
+;   - Final memory values:
+;     * Memory[100] = 15 (0b1111, result of 8 XOR 7)
+;     * Memory[104] = 9  (0b1001, result of 6 XOR 15)
+;===============================================
+
+; Initialize registers with test values
+MOV eax #10    ; 0b1010
+MOV ebx #12    ; 0b1100
+MOV ecx #15    ; 0b1111
+
+; Test register XOR with immediate value
+XOR eax #5     ; eax = 0b1010 XOR 0b0101 = 0b1111 (15)
+
+; Test register XOR with register
+XOR ebx ecx    ; ebx = 0b1100 XOR 0b1111 = 0b0011 (3)
+
+; Test memory XOR with immediate value
+MOV [100] #8   ; Memory[100] = 0b1000
+XOR [100] #7   ; Memory[100] = 0b1000 XOR 0b0111 = 0b1111 (15)
+
+; Test memory XOR with register
+MOV [104] #6   ; Memory[104] = 0b0110
+XOR [104] eax  ; Memory[104] = 0b0110 XOR 0b1111 = 0b1001 (9)
+
+HALT
