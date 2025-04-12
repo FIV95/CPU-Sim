@@ -85,3 +85,13 @@ JNZ   ; Jump if not zero (if last result was not 0)
 HALT  ; Stop program execution
       ; Examples:
       ;   HALT            ; End program
+
+CMP dest, src
+    Compare two values and set dest to 1 if dest < src, 0 otherwise
+    Example: CMP eax, ebx    ; Set eax to 1 if eax < ebx, 0 otherwise
+    Example: CMP eax, #15    ; Set eax to 1 if eax < 15, 0 otherwise
+
+TEST dest, src
+    Perform bitwise AND between dest and src, set dest to 1 if result is non-zero, 0 otherwise
+    Example: TEST eax, #2    ; Test if bit 1 is set in eax
+    Example: TEST eax, ebx   ; Test bits set in both eax and ebx

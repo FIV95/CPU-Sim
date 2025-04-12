@@ -22,9 +22,12 @@
 ;===============================================
 
 ; Initialize registers
-MOV eax #10    ; eax = 10
-MOV ebx #5     ; ebx = 5
-MOV ecx #0     ; ecx = 0 (counter)
+MOV eax #5
+MOV ebx #42
+MOV ecx #0
+MOV edx #10
+MOV esi #42
+MOV edi #15
 
 ; Store some values in memory
 MOV [100] #42  ; Memory[100] = 42
@@ -36,53 +39,32 @@ LOAD edx [100] ; edx = 42
 LOAD esi [104] ; esi = 123
 LOAD edi [108] ; edi = 255
 
-; Arithmetic operations
-ADD eax ebx    ; eax = eax + ebx (10 + 5 = 15)
-SUB eax #3     ; eax = eax - 3 (15 - 3 = 12)
+; Memory ops
+MOV [100] ebx
+LOAD ebx [100]
 
-; Test INC and DEC instructions
-INC ebx        ; ebx = 6
-INC ebx        ; ebx = 7
-DEC ebx        ; ebx = 6
+; Arithmetic
+ADD edx #5
+SUB edx #10
+INC edx
+DEC edx
 
-; Test NOT instruction
-NOT ecx        ; ecx = -1 (all bits inverted)
+; Bitwise
+OR esi #21
+AND edi esi
+XOR esi #21
+NOT edi
 
-; Test AND instructions
-MOV edi #31    ; edi = 31 (0b11111)
-AND edi #15    ; edi = 15 (0b01111)
-MOV edx #60    ; edx = 60 (0b111100)
-AND edx edi    ; edx = 12 (0b001100)
+; Shifts
+MOV ebx #64
+SHL ebx #1
+SHR ebx #2
 
-; Test OR instructions
-MOV esi #36    ; esi = 36 (0b100100)
-OR esi #18     ; esi = 54 (0b110110)
-MOV edi #5     ; edi = 5 (0b00101)
-OR edi esi     ; edi = 55 (0b110111)
-
-; Test XOR instructions
-MOV esi #42    ; esi = 42 (0b101010)
-XOR esi #21    ; esi = 63 (0b111111)
-MOV edi #15    ; edi = 15 (0b001111)
-XOR edi esi    ; edi = 48 (0b110000)
-
-; Test shift instructions
-MOV esi #8     ; esi = 8 (0b1000)
-SHL esi #2     ; esi = 32 (0b100000)
-MOV edi #32    ; edi = 32 (0b100000)
-SHR edi #2     ; edi = 8 (0b1000)
-
-; Test shift with memory
-MOV [112] #16  ; Memory[112] = 16
-SHL [112] #1   ; Memory[112] = 32
-MOV [116] #64  ; Memory[116] = 64
-SHR [116] #2   ; Memory[116] = 16
-
-; Loop to demonstrate jumps
-loop_start:
-    ADD ecx #1     ; Increment counter
-    SUB eax #1     ; Decrement eax
-    JNZ loop_start ; Jump if eax != 0
+; Control flow
+loop:
+    ADD ecx #1
+    SUB eax #1
+    JNZ loop
 
 ; Final state check
 JZ done        ; If eax == 0, we're done

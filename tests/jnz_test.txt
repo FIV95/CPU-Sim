@@ -1,0 +1,26 @@
+;
+; JNZ Instruction Test
+; Tests the Jump if Not Zero (JNZ) instruction functionality
+;
+; Expected Results:
+; - When eax is non-zero, should jump to the specified label
+; - When eax is zero, should continue to next instruction
+; - Should work with forward and backward jumps
+;
+
+; Test 1: Jump when eax is non-zero
+MOV eax #5      ; Set eax to non-zero
+JNZ test2       ; Should jump to test2
+MOV ebx #1      ; Should be skipped
+HALT            ; Should be skipped
+
+test2:
+MOV ebx #2      ; ebx should be 2 after jump
+MOV eax #0      ; Set eax to zero for next test
+JNZ skip        ; Should NOT jump since eax is 0
+MOV ecx #3      ; Should execute this
+HALT
+
+skip:
+MOV ecx #4      ; Should not reach here
+HALT

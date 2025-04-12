@@ -24,6 +24,7 @@ class InstructionType(Enum):
     SUB = auto()    # Subtract two values
     JMP = auto()    # Unconditional jump
     JZ = auto()     # Jump if zero
+    JNZ = auto()    # Jump if not zero
     AND = auto()    # Bitwise AND
     OR = auto()     # Bitwise OR
     XOR = auto()    # Bitwise XOR
@@ -32,6 +33,8 @@ class InstructionType(Enum):
     DEC = auto()    # Decrement register
     SHL = auto()    # Shift left
     SHR = auto()    # Shift right
+    CMP = auto()    # Compare two values
+    TEST = auto()   # Test bits (AND without storing)
     HALT = auto()   # Stop execution
 
 @dataclass
@@ -80,6 +83,7 @@ class SimpleISA:
         self.instructions = []
         self.labels = {}
         self.pc = 0
+        self.running = True
 
         for i, line in enumerate(program):
             line = line.strip()
@@ -118,65 +122,55 @@ class SimpleISA:
         if not self.running or self.pc >= len(self.instructions):
             return False
 
-        # Check test mode instruction limit
-        if self.test_mode and self.instruction_count >= self.max_instructions:
-            self.logger.log(LogLevel.WARNING, f"Test mode: Reached maximum instruction limit ({self.max_instructions})")
-            self.running = False
-            return False
-
         instruction = self.instructions[self.pc]
-        self.logger.log(LogLevel.INFO, f"\nExecuting instruction {self.pc}: {instruction.type.name} {instruction.operands}")
+        self.pc += 1
+        self.instruction_count += 1
 
-        # Execute instruction
         try:
-            # Default behavior: increment PC before execution
-            next_pc = self.pc + 1
+            if instruction.type == InstructionType.MOV:
+                self._execute_mov(instruction.operands)
+            elif instruction.type == InstructionType.LOAD:
+                self._execute_load(instruction.operands)
+            elif instruction.type == InstructionType.ADD:
+                self._execute_add(instruction.operands)
+            elif instruction.type == InstructionType.SUB:
+                self._execute_sub(instruction.operands)
+            elif instruction.type == InstructionType.INC:
+                self._execute_inc(instruction.operands)
+            elif instruction.type == InstructionType.DEC:
+                self._execute_dec(instruction.operands)
+            elif instruction.type == InstructionType.NOT:
+                self._execute_not(instruction.operands)
+            elif instruction.type == InstructionType.AND:
+                self._execute_and(instruction.operands)
+            elif instruction.type == InstructionType.OR:
+                self._execute_or(instruction.operands)
+            elif instruction.type == InstructionType.XOR:
+                self._execute_xor(instruction.operands)
+            elif instruction.type == InstructionType.CMP:
+                self._execute_cmp(instruction.operands)
+            elif instruction.type == InstructionType.TEST:
+                self._execute_test(instruction.operands)
+            elif instruction.type == InstructionType.SHL:
+                self._execute_shift(instruction.operands, True)
+            elif instruction.type == InstructionType.SHR:
+                self._execute_shift(instruction.operands, False)
+            elif instruction.type == InstructionType.JMP:
+                self.pc = self._execute_jmp(instruction.operands)
+            elif instruction.type == InstructionType.JZ:
+                self.pc = self._execute_jz(instruction.operands)
+            elif instruction.type == InstructionType.JNZ:
+                self.pc = self._execute_jnz(instruction.operands)
+            elif instruction.type == InstructionType.HALT:
+                self.running = False
+                return False
+            else:
+                raise ValueError(f"Unknown instruction: {instruction.type}")
 
-            match instruction.type:
-                case InstructionType.MOV:
-                    self._execute_mov(instruction.operands)
-                case InstructionType.LOAD:
-                    self._execute_load(instruction.operands)
-                case InstructionType.STORE:
-                    self._execute_store(instruction.operands)
-                case InstructionType.ADD:
-                    self._execute_add(instruction.operands)
-                case InstructionType.SUB:
-                    self._execute_sub(instruction.operands)
-                case InstructionType.JMP:
-                    next_pc = self._execute_jmp(instruction.operands)
-                case InstructionType.JZ:
-                    next_pc = self._execute_jz(instruction.operands)
-                case InstructionType.AND:
-                    self._execute_and(instruction.operands)
-                case InstructionType.OR:
-                    self._execute_or(instruction.operands)
-                case InstructionType.XOR:
-                    self._execute_xor(instruction.operands)
-                case InstructionType.NOT:
-                    self._execute_not(instruction.operands)
-                case InstructionType.INC:
-                    self._execute_inc(instruction.operands)
-                case InstructionType.DEC:
-                    self._execute_dec(instruction.operands)
-                case InstructionType.SHL:
-                    self._execute_shl(instruction.operands)
-                case InstructionType.SHR:
-                    self._execute_shr(instruction.operands)
-                case InstructionType.HALT:
-                    self.running = False
-                    return False
-                case _:
-                    raise ValueError(f"Unknown instruction type: {instruction.type}")
-
-            # Update PC after execution
-            self.pc = next_pc
-            self.instruction_count += 1
-            self._print_state()
             return True
 
         except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error executing instruction: {str(e)}")
+            print(f"Error executing instruction: {e}")
             self.running = False
             return False
 
@@ -414,10 +408,10 @@ class SimpleISA:
                 'source': src
             })
 
-    def _execute_shl(self, operands: List[str]) -> None:
-        """Execute SHL (Shift Left) instruction"""
+    def _execute_shift(self, operands: List[str], left: bool) -> None:
+        """Execute SHL or SHR instruction"""
         if len(operands) != 2:
-            raise ValueError("SHL requires 2 operands")
+            raise ValueError("Shift requires 2 operands")
 
         dest, src = operands
 
@@ -437,71 +431,28 @@ class SimpleISA:
             # Memory operation
             addr = self._evaluate_address(dest[1:-1])
             dest_val = self.cache.read(addr) if self.cache else self.memory.read(addr)
-            result = dest_val << shift_amount
+            result = dest_val << shift_amount if left else dest_val >> shift_amount
             if self.cache:
                 self.cache.write(addr, result)
             self.memory.write(addr, result)
-            self.logger.log_register_operation('shl', {
+            self.logger.log_register_operation('shift', {
                 'dest': f"Memory[{addr}]",
                 'value': result,
-                'source': src
+                'source': src,
+                'left': left
             })
         else:
             # Register operation
             if dest not in self.registers:
                 raise ValueError(f"Invalid destination register: {dest}")
             dest_val = self.registers[dest]
-            result = dest_val << shift_amount
+            result = dest_val << shift_amount if left else dest_val >> shift_amount
             self.registers[dest] = result
-            self.logger.log_register_operation('shl', {
+            self.logger.log_register_operation('shift', {
                 'dest': dest,
                 'value': result,
-                'source': src
-            })
-
-    def _execute_shr(self, operands: List[str]) -> None:
-        """Execute SHR (Shift Right) instruction"""
-        if len(operands) != 2:
-            raise ValueError("SHR requires 2 operands")
-
-        dest, src = operands
-
-        # Get shift amount
-        if src.startswith('#'):
-            shift_amount = int(src[1:])
-        elif src.startswith('['):
-            addr = self._evaluate_address(src[1:-1])
-            shift_amount = self.cache.read(addr) if self.cache else self.memory.read(addr)
-        else:
-            if src not in self.registers:
-                raise ValueError(f"Invalid source register: {src}")
-            shift_amount = self.registers[src]
-
-        # Perform shift operation
-        if dest.startswith('['):
-            # Memory operation
-            addr = self._evaluate_address(dest[1:-1])
-            dest_val = self.cache.read(addr) if self.cache else self.memory.read(addr)
-            result = dest_val >> shift_amount
-            if self.cache:
-                self.cache.write(addr, result)
-            self.memory.write(addr, result)
-            self.logger.log_register_operation('shr', {
-                'dest': f"Memory[{addr}]",
-                'value': result,
-                'source': src
-            })
-        else:
-            # Register operation
-            if dest not in self.registers:
-                raise ValueError(f"Invalid destination register: {dest}")
-            dest_val = self.registers[dest]
-            result = dest_val >> shift_amount
-            self.registers[dest] = result
-            self.logger.log_register_operation('shr', {
-                'dest': dest,
-                'value': result,
-                'source': src
+                'source': src,
+                'left': left
             })
 
     def _execute_jmp(self, operands: List[str]) -> int:
@@ -539,7 +490,7 @@ class SimpleISA:
 
         if self.registers['eax'] != 0:
             return self.labels[label]
-        return self.pc + 1
+        return self.pc
 
     def _execute_load(self, operands: List[str]) -> None:
         """Execute LOAD instruction"""
@@ -564,6 +515,38 @@ class SimpleISA:
             'value': value,
             'source': f'memory[{addr}]'
         })
+
+    def _execute_cmp(self, operands: List[str]) -> None:
+        """Execute CMP instruction"""
+        if len(operands) != 2:
+            raise ValueError("CMP requires 2 operands")
+
+        dest, src = operands
+
+        # Get source value
+        if src.startswith('#'):
+            value = int(src[1:])
+        else:
+            value = self.registers.get(src, 0)
+
+        # Compare values
+        self.registers['eax'] = 1 if self.registers['eax'] < value else 0
+
+    def _execute_test(self, operands: List[str]) -> None:
+        """Execute TEST instruction"""
+        if len(operands) != 2:
+            raise ValueError("TEST requires 2 operands")
+
+        dest, src = operands
+
+        # Get source value
+        if src.startswith('#'):
+            value = int(src[1:])
+        else:
+            value = self.registers.get(src, 0)
+
+        # Test bits (AND without storing)
+        self.registers['eax'] = 1 if self.registers['eax'] & value else 0
 
     def _evaluate_address(self, expr: str) -> int:
         """Evaluate a memory address expression"""
