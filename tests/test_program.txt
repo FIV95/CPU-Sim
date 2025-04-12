@@ -66,6 +66,18 @@ XOR esi #21    ; esi = 63 (0b111111)
 MOV edi #15    ; edi = 15 (0b001111)
 XOR edi esi    ; edi = 48 (0b110000)
 
+; Test shift instructions
+MOV esi #8     ; esi = 8 (0b1000)
+SHL esi #2     ; esi = 32 (0b100000)
+MOV edi #32    ; edi = 32 (0b100000)
+SHR edi #2     ; edi = 8 (0b1000)
+
+; Test shift with memory
+MOV [112] #16  ; Memory[112] = 16
+SHL [112] #1   ; Memory[112] = 32
+MOV [116] #64  ; Memory[116] = 64
+SHR [116] #2   ; Memory[116] = 16
+
 ; Loop to demonstrate jumps
 loop_start:
     ADD ecx #1     ; Increment counter

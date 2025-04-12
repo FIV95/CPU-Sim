@@ -51,6 +51,21 @@ OR    ; Bitwise OR between two values
       ;   OR eax ebx      ; eax = eax | ebx (bitwise OR)
       ;   OR eax #15      ; eax = eax | 15
 
+XOR   ; Bitwise XOR (exclusive OR) between two values
+      ; Examples:
+      ;   XOR eax ebx     ; eax = eax ^ ebx (bitwise XOR)
+      ;   XOR eax #15     ; eax = eax ^ 15
+
+SHL   ; Shift left (multiply by power of 2)
+      ; Examples:
+      ;   SHL eax #2      ; eax = eax << 2 (multiply by 4)
+      ;   SHL [100] #1    ; Memory[100] = Memory[100] << 1
+
+SHR   ; Shift right (divide by power of 2)
+      ; Examples:
+      ;   SHR eax #2      ; eax = eax >> 2 (divide by 4)
+      ;   SHR [100] #1    ; Memory[100] = Memory[100] >> 1
+
 ; Control Flow
 ;------------
 JMP   ; Unconditional jump to label

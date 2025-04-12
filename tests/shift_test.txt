@@ -1,0 +1,35 @@
+;===============================================
+; Test Name: Shift Instruction Test
+; Description: Tests the SHL (Shift Left) and SHR (Shift Right) instructions
+;   - Tests register-to-register operations
+;   - Tests immediate value operations
+;   - Tests memory operations
+;   - Verifies correct bit manipulation
+;
+; Expected Results:
+;   - Register operations:
+;     * eax = 8 (after SHL)
+;     * ebx = 2 (after SHR)
+;   - Memory operations:
+;     * Memory[100] = 32 (after SHL)
+;     * Memory[104] = 8 (after SHR)
+;===============================================
+
+# Initialize registers with test values
+MOV eax #2      ; eax = 2 (0b0010)
+MOV ebx #8      ; ebx = 8 (0b1000)
+
+# Test shift left
+SHL eax #2      ; eax = 8 (0b1000)
+
+# Test shift right
+SHR ebx #2      ; ebx = 2 (0b0010)
+
+# Test shift with memory
+MOV [100] #8    ; Memory[100] = 8
+SHL [100] #2    ; Memory[100] = 32
+
+MOV [104] #32   ; Memory[104] = 32
+SHR [104] #2    ; Memory[104] = 8
+
+HALT

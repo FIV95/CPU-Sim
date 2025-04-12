@@ -16,20 +16,22 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 class InstructionType(Enum):
-    """Types of instructions supported"""
-    MOV = auto()    # Move data
-    ADD = auto()    # Add values
-    SUB = auto()    # Subtract values
-    INC = auto()    # Increment value
-    DEC = auto()    # Decrement value
-    NOT = auto()    # Bitwise NOT
+    """Instruction types supported by the CPU"""
+    MOV = auto()    # Move data between registers/memory
+    LOAD = auto()   # Load from memory to register
+    STORE = auto()  # Store from register to memory
+    ADD = auto()    # Add two values
+    SUB = auto()    # Subtract two values
+    JMP = auto()    # Unconditional jump
+    JZ = auto()     # Jump if zero
     AND = auto()    # Bitwise AND
     OR = auto()     # Bitwise OR
     XOR = auto()    # Bitwise XOR
-    JMP = auto()    # Unconditional jump
-    JZ = auto()     # Jump if zero
-    JNZ = auto()    # Jump if not zero
-    LOAD = auto()   # Load from memory
+    NOT = auto()    # Bitwise NOT
+    INC = auto()    # Increment register
+    DEC = auto()    # Decrement register
+    SHL = auto()    # Shift left
+    SHR = auto()    # Shift right
     HALT = auto()   # Stop execution
 
 @dataclass
@@ -130,35 +132,42 @@ class SimpleISA:
             # Default behavior: increment PC before execution
             next_pc = self.pc + 1
 
-            if instruction.type == InstructionType.MOV:
-                self._execute_mov(instruction.operands)
-            elif instruction.type == InstructionType.ADD:
-                self._execute_add(instruction.operands)
-            elif instruction.type == InstructionType.SUB:
-                self._execute_sub(instruction.operands)
-            elif instruction.type == InstructionType.INC:
-                self._execute_inc(instruction.operands)
-            elif instruction.type == InstructionType.DEC:
-                self._execute_dec(instruction.operands)
-            elif instruction.type == InstructionType.NOT:
-                self._execute_not(instruction.operands)
-            elif instruction.type == InstructionType.AND:
-                self._execute_and(instruction.operands)
-            elif instruction.type == InstructionType.OR:
-                self._execute_or(instruction.operands)
-            elif instruction.type == InstructionType.XOR:
-                self._execute_xor(instruction.operands)
-            elif instruction.type == InstructionType.JMP:
-                next_pc = self._execute_jmp(instruction.operands)
-            elif instruction.type == InstructionType.JZ:
-                next_pc = self._execute_jz(instruction.operands)
-            elif instruction.type == InstructionType.JNZ:
-                next_pc = self._execute_jnz(instruction.operands)
-            elif instruction.type == InstructionType.LOAD:
-                self._execute_load(instruction.operands)
-            elif instruction.type == InstructionType.HALT:
-                self.running = False
-                return False
+            match instruction.type:
+                case InstructionType.MOV:
+                    self._execute_mov(instruction.operands)
+                case InstructionType.LOAD:
+                    self._execute_load(instruction.operands)
+                case InstructionType.STORE:
+                    self._execute_store(instruction.operands)
+                case InstructionType.ADD:
+                    self._execute_add(instruction.operands)
+                case InstructionType.SUB:
+                    self._execute_sub(instruction.operands)
+                case InstructionType.JMP:
+                    next_pc = self._execute_jmp(instruction.operands)
+                case InstructionType.JZ:
+                    next_pc = self._execute_jz(instruction.operands)
+                case InstructionType.AND:
+                    self._execute_and(instruction.operands)
+                case InstructionType.OR:
+                    self._execute_or(instruction.operands)
+                case InstructionType.XOR:
+                    self._execute_xor(instruction.operands)
+                case InstructionType.NOT:
+                    self._execute_not(instruction.operands)
+                case InstructionType.INC:
+                    self._execute_inc(instruction.operands)
+                case InstructionType.DEC:
+                    self._execute_dec(instruction.operands)
+                case InstructionType.SHL:
+                    self._execute_shl(instruction.operands)
+                case InstructionType.SHR:
+                    self._execute_shr(instruction.operands)
+                case InstructionType.HALT:
+                    self.running = False
+                    return False
+                case _:
+                    raise ValueError(f"Unknown instruction type: {instruction.type}")
 
             # Update PC after execution
             self.pc = next_pc
@@ -400,6 +409,96 @@ class SimpleISA:
             result = dest_val ^ src_val
             self.registers[dest] = result
             self.logger.log_register_operation('xor', {
+                'dest': dest,
+                'value': result,
+                'source': src
+            })
+
+    def _execute_shl(self, operands: List[str]) -> None:
+        """Execute SHL (Shift Left) instruction"""
+        if len(operands) != 2:
+            raise ValueError("SHL requires 2 operands")
+
+        dest, src = operands
+
+        # Get shift amount
+        if src.startswith('#'):
+            shift_amount = int(src[1:])
+        elif src.startswith('['):
+            addr = self._evaluate_address(src[1:-1])
+            shift_amount = self.cache.read(addr) if self.cache else self.memory.read(addr)
+        else:
+            if src not in self.registers:
+                raise ValueError(f"Invalid source register: {src}")
+            shift_amount = self.registers[src]
+
+        # Perform shift operation
+        if dest.startswith('['):
+            # Memory operation
+            addr = self._evaluate_address(dest[1:-1])
+            dest_val = self.cache.read(addr) if self.cache else self.memory.read(addr)
+            result = dest_val << shift_amount
+            if self.cache:
+                self.cache.write(addr, result)
+            self.memory.write(addr, result)
+            self.logger.log_register_operation('shl', {
+                'dest': f"Memory[{addr}]",
+                'value': result,
+                'source': src
+            })
+        else:
+            # Register operation
+            if dest not in self.registers:
+                raise ValueError(f"Invalid destination register: {dest}")
+            dest_val = self.registers[dest]
+            result = dest_val << shift_amount
+            self.registers[dest] = result
+            self.logger.log_register_operation('shl', {
+                'dest': dest,
+                'value': result,
+                'source': src
+            })
+
+    def _execute_shr(self, operands: List[str]) -> None:
+        """Execute SHR (Shift Right) instruction"""
+        if len(operands) != 2:
+            raise ValueError("SHR requires 2 operands")
+
+        dest, src = operands
+
+        # Get shift amount
+        if src.startswith('#'):
+            shift_amount = int(src[1:])
+        elif src.startswith('['):
+            addr = self._evaluate_address(src[1:-1])
+            shift_amount = self.cache.read(addr) if self.cache else self.memory.read(addr)
+        else:
+            if src not in self.registers:
+                raise ValueError(f"Invalid source register: {src}")
+            shift_amount = self.registers[src]
+
+        # Perform shift operation
+        if dest.startswith('['):
+            # Memory operation
+            addr = self._evaluate_address(dest[1:-1])
+            dest_val = self.cache.read(addr) if self.cache else self.memory.read(addr)
+            result = dest_val >> shift_amount
+            if self.cache:
+                self.cache.write(addr, result)
+            self.memory.write(addr, result)
+            self.logger.log_register_operation('shr', {
+                'dest': f"Memory[{addr}]",
+                'value': result,
+                'source': src
+            })
+        else:
+            # Register operation
+            if dest not in self.registers:
+                raise ValueError(f"Invalid destination register: {dest}")
+            dest_val = self.registers[dest]
+            result = dest_val >> shift_amount
+            self.registers[dest] = result
+            self.logger.log_register_operation('shr', {
                 'dest': dest,
                 'value': result,
                 'source': src
