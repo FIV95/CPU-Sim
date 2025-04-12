@@ -4,7 +4,9 @@
 ;   - Register operations (MOV)
 ;   - Memory operations (LOAD)
 ;   - Arithmetic (ADD, SUB, INC, DEC)
-;   - Logical (NOT, AND, OR)
+;   - Logical (NOT, AND, OR, XOR)
+;   - Shifts (SHL, SHR)
+;   - Comparisons (CMP, TEST)
 ;   - Control flow (JMP, JZ, JNZ)
 ;   - Cache behavior
 ;
@@ -22,12 +24,12 @@
 ;===============================================
 
 ; Initialize registers
-MOV eax #5
-MOV ebx #42
-MOV ecx #0
-MOV edx #10
-MOV esi #42
-MOV edi #15
+MOV eax #5     ; eax = 5 (loop counter)
+MOV ebx #42    ; ebx = 42
+MOV ecx #0     ; ecx = 0 (will count iterations)
+MOV edx #10    ; edx = 10 (for arithmetic)
+MOV esi #42    ; esi = 42 (0b101010)
+MOV edi #15    ; edi = 15 (0b001111)
 
 ; Store some values in memory
 MOV [100] #42  ; Memory[100] = 42
@@ -55,10 +57,68 @@ AND edi esi
 XOR esi #21
 NOT edi
 
+; Test comparison operations
+MOV esi #42    ; esi = 42 (for comparison)
+MOV edi #50    ; edi = 50 (for comparison)
+CMP esi edi    ; esi < edi, so esi = 1
+CMP edi esi    ; edi > esi, so edi = 0
+CMP esi #50    ; esi < 50, so esi = 1
+CMP esi #40    ; esi > 40, so esi = 0
+
+; Test bit testing
+MOV esi #10    ; esi = 10 (0b1010)
+MOV edi #2     ; edi = 2  (0b0010)
+TEST esi edi   ; esi = 10 (0b1010), edi = 2 (0b0010)
+               ; Result = 1 (bit 1 is set in both)
+TEST esi #4    ; esi = 10 (0b1010), testing bit 2
+               ; Result = 1 (bit 2 is set)
+
 ; Shifts
 MOV ebx #64
 SHL ebx #1
 SHR ebx #2
+
+; Complex arithmetic combinations
+MOV eax #100   ; eax = 100
+ADD eax #50    ; eax = 150
+SUB eax #25    ; eax = 125
+INC eax        ; eax = 126
+DEC eax        ; eax = 125
+ADD eax ebx    ; eax = 125 + 32 = 157
+
+; Nested logical operations
+MOV esi #255   ; esi = 255 (0b11111111)
+MOV edi #15    ; edi = 15  (0b00001111)
+AND esi edi    ; esi = 15  (0b00001111)
+OR esi #240    ; esi = 255 (0b11111111)
+XOR esi #128   ; esi = 127 (0b01111111)
+NOT esi        ; esi = -128 (0b10000000)
+
+; Complex shift operations
+MOV ebx #1     ; ebx = 1
+SHL ebx #1     ; ebx = 2
+SHL ebx #2     ; ebx = 8
+SHL ebx #1     ; ebx = 16
+SHR ebx #2     ; ebx = 4
+SHR ebx #1     ; ebx = 2
+
+; Complex comparison chain
+MOV eax #100   ; eax = 100
+MOV ebx #200   ; ebx = 200
+CMP eax ebx    ; eax < ebx
+MOV ecx #50    ; ecx = 50
+CMP ecx eax    ; ecx < eax
+CMP ebx #150   ; ebx > 150
+CMP eax #90    ; eax > 90
+
+; Complex bit testing
+MOV ecx #85    ; ecx = 85 (0b01010101)
+MOV edx #170   ; edx = 170 (0b10101010)
+TEST ecx edx   ; Testing bits between ecx and edx
+TEST ecx #1    ; Testing bit 0
+TEST ecx #2    ; Testing bit 1
+TEST ecx #4    ; Testing bit 2
+TEST ecx #8    ; Testing bit 3
 
 ; Control flow
 loop:

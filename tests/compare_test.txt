@@ -1,0 +1,75 @@
+;
+; Test Name: Comprehensive CMP and TEST Instruction Test
+; Description: Tests the CMP (Compare) and TEST instructions with various
+;   operand combinations and edge cases
+;
+; Expected Results:
+;   - CMP tests:
+;     * Register comparison: eax = 1 (when first < second), 0 (when first >= second)
+;     * Immediate comparison: eax = 1 (when first < second), 0 (when first >= second)
+;     * Edge cases: equal values, negative values, zero values
+;   - TEST tests:
+;     * Register testing: eax = 1 (when bits match), 0 (when no bits match)
+;     * Immediate testing: eax = 1 (when bits match), 0 (when no bits match)
+;     * Edge cases: all bits set, no bits set, specific bit positions
+;===============================================
+
+; Initialize registers with test values
+MOV eax #42    ; eax = 42
+MOV ebx #50    ; ebx = 50
+MOV ecx #10    ; ecx = 10 (0b1010)
+MOV edx #2     ; edx = 2  (0b0010)
+MOV esi #-5    ; esi = -5
+MOV edi #0     ; edi = 0
+
+; Test CMP with registers - basic cases
+CMP eax ebx    ; eax < ebx, so eax = 1
+CMP ebx eax    ; ebx > eax, so ebx = 0
+CMP eax eax    ; eax = eax, so eax = 0 (equal values)
+
+; Test CMP with registers - edge cases
+CMP esi eax    ; esi < eax, so esi = 1 (negative < positive)
+CMP edi esi    ; edi > esi, so edi = 0 (zero > negative)
+CMP edi edi    ; edi = edi, so edi = 0 (equal zeros)
+
+; Test CMP with immediate values
+CMP eax #50    ; eax < 50, so eax = 1
+CMP eax #40    ; eax > 40, so eax = 0
+CMP eax #42    ; eax = 42, so eax = 0 (equal values)
+CMP esi #0     ; esi < 0, so esi = 1 (negative < zero)
+CMP edi #-10   ; edi > -10, so edi = 0 (zero > negative)
+
+; Test TEST with registers - basic cases
+MOV eax #10    ; eax = 10 (0b1010)
+MOV ebx #2     ; ebx = 2  (0b0010)
+TEST eax ebx   ; eax = 10 (0b1010), ebx = 2 (0b0010)
+               ; Result = 1 (bit 1 is set in both)
+
+; Test TEST with registers - edge cases
+MOV eax #15    ; eax = 15 (0b1111) - all bits set
+MOV ebx #15    ; ebx = 15 (0b1111) - all bits set
+TEST eax ebx   ; Result = 1 (all bits match)
+
+MOV eax #0     ; eax = 0 (0b0000) - no bits set
+MOV ebx #0     ; ebx = 0 (0b0000) - no bits set
+TEST eax ebx   ; Result = 0 (no bits match)
+
+; Test TEST with immediate values
+MOV eax #10    ; eax = 10 (0b1010)
+TEST eax #4    ; eax = 10 (0b1010), testing bit 2
+               ; Result = 1 (bit 2 is set)
+
+MOV eax #5     ; eax = 5 (0b0101)
+TEST eax #2    ; eax = 5 (0b0101), testing bit 1
+               ; Result = 0 (bit 1 is not set)
+
+; Test TEST with specific bit positions
+MOV eax #8     ; eax = 8 (0b1000) - only bit 3 set
+TEST eax #8    ; Testing bit 3
+               ; Result = 1 (bit 3 is set)
+
+MOV eax #7     ; eax = 7 (0b0111) - bits 0,1,2 set
+TEST eax #8    ; Testing bit 3
+               ; Result = 0 (bit 3 is not set)
+
+HALT

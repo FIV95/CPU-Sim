@@ -530,7 +530,7 @@ class SimpleISA:
             value = self.registers.get(src, 0)
 
         # Compare values
-        self.registers['eax'] = 1 if self.registers['eax'] < value else 0
+        self.registers[dest] = 1 if self.registers[dest] < value else 0
 
     def _execute_test(self, operands: List[str]) -> None:
         """Execute TEST instruction"""
@@ -546,7 +546,7 @@ class SimpleISA:
             value = self.registers.get(src, 0)
 
         # Test bits (AND without storing)
-        self.registers['eax'] = 1 if self.registers['eax'] & value else 0
+        self.registers[dest] = 1 if self.registers[dest] & value else 0
 
     def _evaluate_address(self, expr: str) -> int:
         """Evaluate a memory address expression"""

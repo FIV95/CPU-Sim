@@ -22,6 +22,7 @@ def main():
         size=256,        # 256 bytes
         line_size=1,     # 1 byte per line (simplified for simulation)
         associativity=4, # 4-way set associative
+        access_time=30,  # 30ns access time (3x slower than L1)
         write_policy="write-back",
         next_level=main_memory
     )
@@ -32,6 +33,7 @@ def main():
         size=64,         # 64 bytes
         line_size=1,     # 1 byte per line (simplified for simulation)
         associativity=2, # 2-way set associative
+        access_time=10,  # 10ns access time (fastest)
         write_policy="write-through",
         next_level=l2_cache
     )
