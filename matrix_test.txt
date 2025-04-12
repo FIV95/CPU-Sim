@@ -1,0 +1,17 @@
+; Matrix multiplication test program
+; This program performs matrix multiplication using our tested instructions
+
+; Initialize memory with matrix A values
+mov [100] #42   ; A[0][0]
+mov [104] #123  ; A[0][1]
+mov [108] #255  ; A[0][2]
+
+; Load matrix A values into registers for computation
+load eax [100]  ; Load A[0][0]
+load ebx [104]  ; Load A[0][1]
+load ecx [108]  ; Load A[0][2]
+
+; TODO: Add matrix B initialization and multiplication logic
+
+; End program
+halt

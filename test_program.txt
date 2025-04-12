@@ -1,0 +1,36 @@
+; Comprehensive test program demonstrating all ISA features
+; Initialize registers
+MOV eax #10    ; eax = 10
+MOV ebx #5     ; ebx = 5
+MOV ecx #0     ; ecx = 0 (counter)
+
+; Store some values in memory
+MOV [100] #42  ; Memory[100] = 42
+MOV [104] #123 ; Memory[104] = 123
+MOV [108] #255 ; Memory[108] = 255
+
+; Load values from memory to demonstrate cache
+LOAD edx [100] ; edx = 42
+LOAD esi [104] ; esi = 123
+LOAD edi [108] ; edi = 255
+
+; Arithmetic operations
+ADD eax ebx    ; eax = eax + ebx (10 + 5 = 15)
+SUB eax #3     ; eax = eax - 3 (15 - 3 = 12)
+
+; Loop to demonstrate jumps
+loop_start:
+    ADD ecx #1     ; Increment counter
+    SUB eax #1     ; Decrement eax
+    JNZ loop_start ; Jump if eax != 0
+
+; Final state check
+JZ done        ; If eax == 0, we're done
+JMP error      ; Otherwise, something went wrong
+
+done:
+HALT
+
+error:
+MOV eax #0     ; Set error code
+HALT

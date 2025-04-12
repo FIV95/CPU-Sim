@@ -1,659 +1,341 @@
-from memory import Memory
-from cache.cache import Cache
-from utils.logger import Logger, LogLevel
-from time import time
-from typing import Dict, List, Tuple, Any, Callable, Optional
+from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum, auto
+from time import time
+import logging
 
-class AddressingMode(Enum):
-    """Supported addressing modes"""
-    REGISTER = auto()      # eax, ebx, etc.
-    IMMEDIATE = auto()     # #42
-    MEMORY_DIRECT = auto() # [1000]
-    MEMORY_REG = auto()    # [eax]
-    MEMORY_DISP = auto()   # [eax + 10]
-    MEMORY_INDEX = auto()  # [eax + ebx*2]
-    MEMORY_COMPLEX = auto()# [eax + ebx*2 + 10]
+# Import existing utilities
+import sys
+sys.path.append('..')
+from utils.logger import Logger, LogLevel
+from memory import Memory
+from cache.cache import Cache
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
+logger = logging.getLogger(__name__)
+
+class InstructionType(Enum):
+    """Types of instructions supported"""
+    MOV = auto()    # Move data
+    ADD = auto()    # Add values
+    SUB = auto()    # Subtract values
+    JMP = auto()    # Unconditional jump
+    JZ = auto()     # Jump if zero
+    JNZ = auto()    # Jump if not zero
+    LOAD = auto()   # Load from memory
+    HALT = auto()   # Stop execution
 
 @dataclass
-class InstructionHandler:
-    """Handler for a specific instruction"""
-    opcode: str
-    handler: Callable
-    validate: Callable
-    description: str
-    operands: int  # Number of operands expected
+class Instruction:
+    """Represents a single instruction"""
+    type: InstructionType
+    operands: List[str]
+    line_number: int
 
-class ISA:
-    def __init__(self, memory=None, cache=None):
-        # Simple registers
+class SimpleISA:
+    def __init__(self, memory: Optional[Memory] = None, cache: Optional[Cache] = None):
+        # Initialize registers
         self.registers = {
             'eax': 0,
             'ebx': 0,
             'ecx': 0,
             'edx': 0,
             'esi': 0,
-            'edi': 0
+            'edi': 0,
+            'ebp': 0,
+            'esp': 0
         }
 
-        # Program counter and memory system
-        self.pc = 0
+        # Program state
+        self.pc = 0  # Program counter
+        self.instructions: List[Instruction] = []
+        self.labels: Dict[str, int] = {}
+        self.running = False
+
+        # Memory system
         self.memory = memory
         self.cache = cache
+
+        # Logging
         self.logger = Logger()
 
-        # For visualization
-        self.last_operation = None
-        self.last_memory_access = None
+        # Statistics
+        self.instruction_count = 0
+        self.start_time = 0
+        self.test_mode = True  # Enable test mode by default
+        self.max_instructions = 100  # Limit execution in test mode
+        self.end_time = 0
 
-    def read_instructions(self, filename):
-        """Read instructions from file"""
-        with open(filename, 'r') as f:
-            self.instructions = []
-            self.labels = {}
-
-            # Parse instructions and labels
-            for i, line in enumerate(f.readlines()):
-                line = line.strip()
-                if not line or line.startswith(';'):
-                    continue
-
-                if line.endswith(':'):
-                    # Store label
-                    label = line[:-1].strip()
-                    self.labels[label] = len(self.instructions)
-                else:
-                    # Store instruction
-                    self.instructions.append(line)
-
-    def execute_step(self):
-        """Execute one instruction and show memory hierarchy state"""
-        if self.pc >= len(self.instructions):
-            return False
-
-        instruction = self.instructions[self.pc]
-        self.pc += 1
-
-        # Parse instruction
-        parts = instruction.split()
-        op = parts[0]
-
-        # Log start of instruction
-        self.logger.log(LogLevel.INFO, f"\n=== Executing {instruction} ===")
-
-        if op == 'mov':
-            dest, src = parts[1], parts[2]
-            # Memory access
-            if src.startswith('['):
-                # Read from memory through cache
-                addr = self.registers[src[1:-1]]
-                value = self.cache.read(addr)
-                self.registers[dest] = value
-                self.last_memory_access = ('read', addr, value)
-            elif dest.startswith('['):
-                # Write to memory through cache
-                addr = self.registers[dest[1:-1]]
-                value = int(src) if src.isdigit() else self.registers[src]
-                self.cache.write(addr, value)
-                self.last_memory_access = ('write', addr, value)
-            else:
-                # Register to register
-                value = int(src) if src.isdigit() else self.registers[src]
-                self.registers[dest] = value
-
-        elif op == 'add':
-            dest, src = parts[1], parts[2]
-            value = int(src) if src.isdigit() else self.registers[src]
-            self.registers[dest] += value
-
-        elif op == 'cmp':
-            a, b = parts[1], parts[2]
-            a_val = self.registers[a]
-            b_val = int(b) if b.isdigit() else self.registers[b]
-            self.last_cmp = (a_val, b_val)
-
-        elif op == 'jmp':
-            label = parts[1]
-            self.pc = self.labels[label]
-
-        elif op == 'jge':
-            label = parts[1]
-            if self.last_cmp[0] >= self.last_cmp[1]:
-                self.pc = self.labels[label]
-
-        elif op == 'jle':
-            label = parts[1]
-            if self.last_cmp[0] <= self.last_cmp[1]:
-                self.pc = self.labels[label]
-
-        elif op == 'halt':
-            return False
-
-        # Log system state
-        self.print_state()
-        return True
-
-    def print_state(self):
-        """Display current state of CPU and memory hierarchy"""
-        self.logger.log(LogLevel.INFO, "\nCPU State:")
-        self.logger.log(LogLevel.INFO, f"PC: {self.pc}")
-        self.logger.log(LogLevel.INFO, "Registers:")
-        for reg, val in self.registers.items():
-            self.logger.log(LogLevel.INFO, f"  {reg}: {val}")
-
-        if self.last_memory_access:
-            op, addr, val = self.last_memory_access
-            self.logger.log(LogLevel.INFO, f"\nLast Memory Access:")
-            self.logger.log(LogLevel.INFO, f"  Operation: {op}")
-            self.logger.log(LogLevel.INFO, f"  Address: {addr}")
-            self.logger.log(LogLevel.INFO, f"  Value: {val}")
-
-        # Get cache stats
-        if self.cache:
-            stats = self.cache.get_performance_stats()
-            self.logger.log(LogLevel.INFO, "\nCache Performance:")
-            self.logger.log(LogLevel.INFO, f"  Total Accesses: {stats['access_count']}")
-            self.logger.log(LogLevel.INFO, f"  Hit Count: {stats['hit_count']}")
-            self.logger.log(LogLevel.INFO, f"  Miss Count: {stats['miss_count']}")
-            self.logger.log(LogLevel.INFO, f"  Hit Rate: {(stats['hit_count'] / stats['access_count'] * 100) if stats['access_count'] > 0 else 0:.2f}%")
-
-        # Get memory stats
-        if self.memory:
-            stats = self.memory.get_performance_stats()
-            self.logger.log(LogLevel.INFO, "\nMemory Performance:")
-            self.logger.log(LogLevel.INFO, f"  Reads: {stats['reads']}")
-            self.logger.log(LogLevel.INFO, f"  Writes: {stats['writes']}")
-            self.logger.log(LogLevel.INFO, f"  Access Time: {stats['avg_access_time']:.2f}ns")
-
-    def get_array(self):
-        """Get the current array state"""
-        return self.array
-
-    def set_memory(self, memory):
-        """Set the memory interface"""
-        self.memory = memory
-        self.logger.log(LogLevel.DEBUG, f"Set memory interface: {memory}")
-
-    def get_performance_stats(self):
-        """Get performance statistics"""
-        return {
-            'instruction_count': self.instruction_count,
-            'execution_time': self.execution_time,
-            'instructions_per_second': self.instruction_count / self.execution_time if self.execution_time > 0 else 0,
-            'instruction_counts': self.instruction_counts,
-            'instruction_times': self.instruction_times
-        }
-
-    def load_program(self, program):
-        """Load a program into memory"""
+    def load_program(self, program: List[str]) -> None:
+        """Load a program into the ISA"""
         self.instructions = []
         self.labels = {}
         self.pc = 0
-        self.instruction_count = 0
-        self.execution_time = 0
-        self.instruction_counts = {k: 0 for k in self.instruction_counts}
-        self.instruction_times = {k: 0 for k in self.instruction_times}
 
         for i, line in enumerate(program):
             line = line.strip()
             if not line or line.startswith(';'):
                 continue
 
-            # Remove comments
-            if ';' in line:
-                line = line[:line.index(';')].strip()
-
+            # Handle labels
             if line.endswith(':'):
-                # Label
-                label = line[:-1]
+                label = line[:-1].strip()
                 self.labels[label] = len(self.instructions)
                 self.logger.log(LogLevel.DEBUG, f"Found label {label} at instruction {len(self.instructions)}")
-            else:
-                # Instruction
-                parts = line.split()
-                if not parts:
-                    continue
-                opcode = parts[0]
-                operands = parts[1:]
-                self.instructions.append((opcode, operands))
-                self.logger.log(LogLevel.DEBUG, f"Loaded instruction: {opcode} {operands}")
+                continue
 
-    def mov(self, dest, src):
-        """Move value to register or memory"""
-        start_time = time()
+            # Split the line and filter out comments
+            parts = line.split()
+            instruction_parts = []
+            for part in parts:
+                if part.startswith(';'):
+                    break
+                instruction_parts.append(part)
 
+            if not instruction_parts:
+                continue
+
+            # Convert instruction type
+            try:
+                inst_type = InstructionType[instruction_parts[0].upper()]
+                operands = instruction_parts[1:]
+                self.instructions.append(Instruction(inst_type, operands, i))
+                self.logger.log(LogLevel.DEBUG, f"Loaded instruction: {inst_type.name} {operands}")
+            except KeyError:
+                self.logger.log(LogLevel.ERROR, f"Unknown instruction: {instruction_parts[0]}")
+
+    def execute_step(self) -> bool:
+        """Execute one instruction"""
+        if not self.running or self.pc >= len(self.instructions):
+            return False
+
+        # Check test mode instruction limit
+        if self.test_mode and self.instruction_count >= self.max_instructions:
+            self.logger.log(LogLevel.WARNING, f"Test mode: Reached maximum instruction limit ({self.max_instructions})")
+            self.running = False
+            return False
+
+        instruction = self.instructions[self.pc]
+        self.logger.log(LogLevel.INFO, f"\nExecuting instruction {self.pc}: {instruction.type.name} {instruction.operands}")
+
+        # Execute instruction
         try:
-            if src.startswith('#'):
-                value = int(src[1:])
-                self.logger.log(LogLevel.DEBUG, f"MOV: Immediate value {value} -> {dest}")
-            elif src.isdigit():
-                value = int(src)
-                self.logger.log(LogLevel.DEBUG, f"MOV: Immediate value {value} -> {dest}")
-            elif src.startswith('['):
-                # Memory access
-                addr = int(src[1:-1])
-                value = self.memory.read(addr)
-                self.logger.log(LogLevel.DEBUG, f"MOV: Memory[{addr}] ({value}) -> {dest}")
-            else:
-                value = getattr(self, src)
-                self.logger.log(LogLevel.DEBUG, f"MOV: Register {src} ({value}) -> {dest}")
+            # Default behavior: increment PC before execution
+            next_pc = self.pc + 1
 
-            if dest.startswith('['):
-                # Memory write
-                addr = int(dest[1:-1])
+            if instruction.type == InstructionType.MOV:
+                self._execute_mov(instruction.operands)
+            elif instruction.type == InstructionType.ADD:
+                self._execute_add(instruction.operands)
+            elif instruction.type == InstructionType.SUB:
+                self._execute_sub(instruction.operands)
+            elif instruction.type == InstructionType.JMP:
+                next_pc = self._execute_jmp(instruction.operands)
+            elif instruction.type == InstructionType.JZ:
+                next_pc = self._execute_jz(instruction.operands)
+            elif instruction.type == InstructionType.JNZ:
+                next_pc = self._execute_jnz(instruction.operands)
+            elif instruction.type == InstructionType.LOAD:
+                self._execute_load(instruction.operands)
+            elif instruction.type == InstructionType.HALT:
+                self.running = False
+                return False
+
+            # Update PC after execution
+            self.pc = next_pc
+            self.instruction_count += 1
+            self._print_state()
+            return True
+
+        except Exception as e:
+            self.logger.log(LogLevel.ERROR, f"Error executing instruction: {str(e)}")
+            self.running = False
+            return False
+
+    def _execute_mov(self, operands: List[str]) -> None:
+        """Execute MOV instruction"""
+        if len(operands) != 2:
+            raise ValueError("MOV requires 2 operands")
+
+        dest, src = operands
+
+        # Get source value
+        if src.startswith('#'):
+            value = int(src[1:])
+            # Log register operation with enhanced visualization
+            self.logger.log_register_operation('mov', {
+                'dest': dest,
+                'value': value,
+                'source': 'immediate'
+            })
+        elif src.startswith('['):
+            # Memory access
+            addr = self._evaluate_address(src[1:-1])
+            value = self.cache.read(addr) if self.cache else self.memory.read(addr)
+            # Log register operation with enhanced visualization
+            self.logger.log_register_operation('mov', {
+                'dest': dest,
+                'value': value,
+                'source': f'memory[{addr}]'
+            })
+        else:
+            value = self.registers.get(src, 0)
+            # Log register operation with enhanced visualization
+            self.logger.log_register_operation('mov', {
+                'dest': dest,
+                'value': value,
+                'source': src
+            })
+
+        # Store in destination
+        if dest.startswith('['):
+            # Memory write
+            addr = self._evaluate_address(dest[1:-1])
+            if self.cache:
+                self.cache.write(addr, value)
+                # Ensure write-through to memory
                 self.memory.write(addr, value)
-                self.logger.log(LogLevel.DEBUG, f"MOV: Memory[{addr}] = {value}")
             else:
-                setattr(self, dest, value)
-                self.logger.log(LogLevel.DEBUG, f"MOV: {dest} = {value}")
+                self.memory.write(addr, value)
+        else:
+            self.registers[dest] = value
 
-            # Update performance stats
-            end_time = time()
-            self.instruction_counts["mov"] += 1
-            self.instruction_times["mov"] += end_time - start_time
-            self.instruction_count += 1
-            self.execution_time += end_time - start_time
+    def _execute_add(self, operands: List[str]) -> None:
+        """Execute ADD instruction"""
+        if len(operands) != 2:
+            raise ValueError("ADD requires 2 operands")
 
-            return True
+        dest, src = operands
 
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in MOV instruction: {str(e)}")
-            return False
+        # Get source value
+        if src.startswith('#'):
+            value = int(src[1:])
+        else:
+            value = self.registers.get(src, 0)
 
-    def add(self, dest, src):
-        """Add two values"""
-        start_time = time()
+        # Add to destination
+        self.registers[dest] += value
 
-        try:
-            if src.startswith('#'):
-                value = int(src[1:])
-            else:
-                value = getattr(self, src)
-            result = getattr(self, dest) + value
+    def _execute_sub(self, operands: List[str]) -> None:
+        """Execute SUB instruction"""
+        if len(operands) != 2:
+            raise ValueError("SUB requires 2 operands")
 
-            setattr(self, dest, result)
-            self.logger.log(LogLevel.DEBUG, f"ADD: {dest} = {getattr(self, dest)} + {value} = {result}")
+        dest, src = operands
 
-            # Update performance stats
-            end_time = time()
-            self.instruction_counts["add"] += 1
-            self.instruction_times["add"] += end_time - start_time
-            self.instruction_count += 1
-            self.execution_time += end_time - start_time
+        # Get source value
+        if src.startswith('#'):
+            value = int(src[1:])
+        else:
+            value = self.registers.get(src, 0)
 
-            return True
+        # Subtract from destination
+        self.registers[dest] -= value
 
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in ADD instruction: {str(e)}")
-            return False
+    def _execute_jmp(self, operands: List[str]) -> int:
+        """Execute JMP instruction"""
+        if len(operands) != 1:
+            raise ValueError("JMP requires 1 operand")
 
-    def sub(self, dest, src):
-        """Subtract two values"""
-        start_time = time()
+        label = operands[0]
+        if label not in self.labels:
+            raise ValueError(f"Undefined label: {label}")
 
-        try:
-            if src.startswith('#'):
-                value = int(src[1:])
-            else:
-                value = getattr(self, src)
-            result = getattr(self, dest) - value
+        return self.labels[label]
 
-            setattr(self, dest, result)
-            self.logger.log(LogLevel.DEBUG, f"SUB: {dest} = {getattr(self, dest)} - {value} = {result}")
+    def _execute_jz(self, operands: List[str]) -> int:
+        """Execute JZ instruction"""
+        if len(operands) != 1:
+            raise ValueError("JZ requires 1 operand")
 
-            # Update performance stats
-            end_time = time()
-            self.instruction_counts["sub"] += 1
-            self.instruction_times["sub"] += end_time - start_time
-            self.instruction_count += 1
-            self.execution_time += end_time - start_time
+        label = operands[0]
+        if label not in self.labels:
+            raise ValueError(f"Unknown label: {label}")
 
-            return True
+        if self.registers['eax'] == 0:
+            return self.labels[label]
+        return self.pc + 1
 
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in SUB instruction: {str(e)}")
-            return False
+    def _execute_jnz(self, operands: List[str]) -> int:
+        """Execute JNZ instruction"""
+        if len(operands) != 1:
+            raise ValueError("JNZ requires 1 operand")
 
-    def cmp(self, src1, src2):
-        """Compare two values"""
-        start_time = time()
+        label = operands[0]
+        if label not in self.labels:
+            raise ValueError(f"Unknown label: {label}")
 
-        try:
-            if src2.startswith('#'):
-                b_val = int(src2[1:])
-            else:
-                b_val = getattr(self, src2)
-            a_val = getattr(self, src1)
-            result = a_val - b_val
+        if self.registers['eax'] != 0:
+            return self.labels[label]
+        return self.pc + 1
 
-            self.logger.log(LogLevel.DEBUG, f"CMP: {a_val} - {b_val} = {result}")
-            self.logger.log(LogLevel.DEBUG, f"Flags: ZF={result == 0}, SF={result < 0}")
+    def _execute_load(self, operands: List[str]) -> None:
+        """Execute LOAD instruction"""
+        if len(operands) != 2:
+            raise ValueError("LOAD requires 2 operands")
 
-            # Update performance stats
-            end_time = time()
-            self.instruction_counts["cmp"] += 1
-            self.instruction_times["cmp"] += end_time - start_time
-            self.instruction_count += 1
-            self.execution_time += end_time - start_time
+        dest, src = operands
 
-            return True
+        # Get memory address
+        if src.startswith('['):
+            addr = self._evaluate_address(src[1:-1])
+        else:
+            raise ValueError("LOAD source must be a memory address")
 
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in CMP instruction: {str(e)}")
-            return False
+        # Read from memory and store in register
+        value = self.cache.read(addr) if self.cache else self.memory.read(addr)
+        self.registers[dest] = value
 
-    def shl(self, dest, src):
-        """Shift left"""
-        start_time = time()
+        # Log register operation with enhanced visualization
+        self.logger.log_register_operation('load', {
+            'dest': dest,
+            'value': value,
+            'source': f'memory[{addr}]'
+        })
 
-        try:
-            if src.startswith('#'):
-                shift = int(src[1:])
-            else:
-                shift = getattr(self, src)
-            result = getattr(self, dest) << shift
+    def _evaluate_address(self, expr: str) -> int:
+        """Evaluate a memory address expression"""
+        # Simple address evaluation - can be extended for more complex expressions
+        if expr.isdigit():
+            return int(expr)
+        return self.registers.get(expr, 0)
 
-            setattr(self, dest, result)
-            self.logger.log(LogLevel.DEBUG, f"SHL: {dest} = {getattr(self, dest)} << {shift} = {result}")
-
-            # Update performance stats
-            end_time = time()
-            self.instruction_counts["shl"] += 1
-            self.instruction_times["shl"] += end_time - start_time
-            self.instruction_count += 1
-            self.execution_time += end_time - start_time
-
-            return True
-
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in SHL instruction: {str(e)}")
-            return False
-
-    def jmp(self, label):
-        """Unconditional jump"""
-        start_time = time()
-
-        try:
-            if label not in self.labels:
-                self.logger.log(LogLevel.ERROR, f"Undefined label: {label}")
-                return False
-
-            self.pc = self.labels[label]
-            self.logger.log(LogLevel.DEBUG, f"JMP: Jumping to {label} (PC = {self.pc})")
-
-            # Update performance stats
-            end_time = time()
-            self.instruction_counts["jmp"] += 1
-            self.instruction_times["jmp"] += end_time - start_time
-            self.instruction_count += 1
-            self.execution_time += end_time - start_time
-
-            return True
-
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in JMP instruction: {str(e)}")
-            return False
-
-    def jge(self, label):
-        """Jump if greater than or equal"""
-        start_time = time()
-
-        try:
-            if label not in self.labels:
-                self.logger.log(LogLevel.ERROR, f"Undefined label: {label}")
-                return False
-
-            if self.last_cmp[0] >= self.last_cmp[1]:
-                self.pc = self.labels[label]
-                self.logger.log(LogLevel.DEBUG, f"JGE: Jumping to {label} (PC = {self.pc})")
-            else:
-                self.logger.log(LogLevel.DEBUG, f"JGE: Not jumping (ZF={self.last_cmp[0] < self.last_cmp[1]}, SF={self.last_cmp[0] < 0})")
-
-            # Update performance stats
-            end_time = time()
-            self.instruction_counts["jge"] += 1
-            self.instruction_times["jge"] += end_time - start_time
-            self.instruction_count += 1
-            self.execution_time += end_time - start_time
-
-            return True
-
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in JGE instruction: {str(e)}")
-            return False
-
-    def jle(self, label):
-        """Jump if less than or equal"""
-        start_time = time()
-
-        try:
-            if label not in self.labels:
-                self.logger.log(LogLevel.ERROR, f"Undefined label: {label}")
-                return False
-
-            if self.last_cmp[0] <= self.last_cmp[1]:
-                self.pc = self.labels[label]
-                self.logger.log(LogLevel.DEBUG, f"JLE: Jumping to {label} (PC = {self.pc})")
-            else:
-                self.logger.log(LogLevel.DEBUG, f"JLE: Not jumping (ZF={self.last_cmp[0] < self.last_cmp[1]}, SF={self.last_cmp[0] < 0})")
-
-            # Update performance stats
-            end_time = time()
-            self.instruction_counts["jle"] += 1
-            self.instruction_times["jle"] += end_time - start_time
-            self.instruction_count += 1
-            self.execution_time += end_time - start_time
-
-            return True
-
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in JLE instruction: {str(e)}")
-            return False
-
-    def halt(self):
-        """Stop execution"""
-        start_time = time()
-
-        try:
-            self.logger.log(LogLevel.DEBUG, "HALT: Stopping execution")
-
-            # Update performance stats
-            end_time = time()
-            self.instruction_counts["halt"] += 1
-            self.instruction_times["halt"] += end_time - start_time
-            self.instruction_count += 1
-            self.execution_time += end_time - start_time
-
-            return True
-
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in HALT instruction: {str(e)}")
-            return False
-
-    def _update_flags(self, result):
-        """Update CPU flags based on operation result"""
-        self.flags['zero'] = result == 0
-        self.flags['sign'] = result < 0
-        self.flags['carry'] = result > 0xFFFFFFFF
-        self.flags['overflow'] = result > 0x7FFFFFFF or result < -0x80000000
-
-    def debug_info(self):
-        """Get debug information"""
-        return {
-            "registers": {k: getattr(self, k) for k in ['eax', 'ebx', 'ecx', 'edx', 'esi', 'edi']},
-            "flags": self.flags,
-            "instruction_count": self.instruction_count,
-            "execution_time": self.execution_time,
-            "memory_stats": self.memory.get_performance_stats() if self.memory else None,
-            "performance_stats": self.get_performance_stats()
-        }
-
-    def print_debug_info(self):
-        """Print formatted debug information"""
-        self.logger.log(LogLevel.DEBUG, "=== ISA Debug Info ===")
-
-        # Print register info
-        self.logger.log(LogLevel.DEBUG, "\nRegisters:")
+    def _print_state(self) -> None:
+        """Print the current state of the CPU and memory"""
+        print("\nCPU State:")
+        print(f"PC: {self.pc}")
+        print("Registers:")
         for reg, value in self.registers.items():
-            self.logger.log(LogLevel.DEBUG, f"  {reg}: {value}")
+            print(f"  {reg}: {value}")
 
-        # Print flags
-        self.logger.log(LogLevel.DEBUG, "\nFlags:")
-        for flag, value in self.flags.items():
-            self.logger.log(LogLevel.DEBUG, f"  {flag}: {value}")
+        print("\nCache Performance:")
+        if self.cache:
+            try:
+                stats = self.cache.get_performance_stats()
+                print(f"  Hits: {stats.get('hits', 0)}")
+                print(f"  Misses: {stats.get('misses', 0)}")
+                print(f"  Hit Rate: {stats.get('hit_rate', 0.0):.2f}%")
+            except Exception as e:
+                print(f"  Error getting cache stats: {str(e)}")
+        else:
+            print("  No cache present")
 
-        # Print performance info
-        stats = self.get_performance_stats()
-        self.logger.log(LogLevel.DEBUG, "\nPerformance:")
-        self.logger.log(LogLevel.DEBUG, f"  Total Instructions: {stats['instruction_count']}")
-        self.logger.log(LogLevel.DEBUG, f"  Execution Time: {stats['execution_time']:.6f} seconds")
-        self.logger.log(LogLevel.DEBUG, f"  Instructions/Second: {stats['instructions_per_second']:.2f}")
+    def run(self) -> None:
+        """Run the loaded program"""
+        self.running = True
+        self.start_time = time()
+        self.instruction_count = 0
 
-        # Print instruction counts
-        self.logger.log(LogLevel.DEBUG, "\nInstruction Counts:")
-        for opcode, count in stats['instruction_counts'].items():
-            if count > 0:
-                self.logger.log(LogLevel.DEBUG, f"  {opcode}: {count}")
+        while self.running:
+            if not self.execute_step():
+                break
 
-        # Print memory info if available
-        if self.memory:
-            self.memory.print_debug_info()
+        self.end_time = time()
+        exec_time = self.end_time - self.start_time
+        ips = self.instruction_count / exec_time if exec_time > 0 else 0
 
-    def inc(self, dest):
-        """Increment value"""
-        start_time = time()
-        try:
-            value = getattr(self, dest)
-            setattr(self, dest, value + 1)
-            self.logger.log(LogLevel.DEBUG, f"INC: {dest} = {value} + 1 = {getattr(self, dest)}")
-            return True
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in INC instruction: {str(e)}")
-            return False
-
-    def dec(self, dest):
-        """Decrement value"""
-        start_time = time()
-        try:
-            value = getattr(self, dest)
-            setattr(self, dest, value - 1)
-            self.logger.log(LogLevel.DEBUG, f"DEC: {dest} = {value} - 1 = {getattr(self, dest)}")
-            return True
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in DEC instruction: {str(e)}")
-            return False
-
-    def shr(self, dest, count):
-        """Shift right"""
-        start_time = time()
-        try:
-            if count.startswith('#'):
-                shift = int(count[1:])
-            else:
-                shift = getattr(self, count)
-            value = getattr(self, dest)
-            result = value >> shift
-            setattr(self, dest, result)
-            self.logger.log(LogLevel.DEBUG, f"SHR: {dest} = {value} >> {shift} = {result}")
-            return True
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in SHR instruction: {str(e)}")
-            return False
-
-    def je(self, label):
-        """Jump if equal"""
-        start_time = time()
-        try:
-            if label not in self.labels:
-                raise ValueError(f"Undefined label: {label}")
-            if self.flags['zero']:
-                self.pc = self.labels[label]
-            self.logger.log(LogLevel.DEBUG, f"JE: Jumping to {label} (PC = {self.pc})")
-            return True
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in JE instruction: {str(e)}")
-            return False
-
-    def jne(self, label):
-        """Jump if not equal"""
-        start_time = time()
-        try:
-            if label not in self.labels:
-                raise ValueError(f"Undefined label: {label}")
-            if not self.flags['zero']:
-                self.pc = self.labels[label]
-            self.logger.log(LogLevel.DEBUG, f"JNE: Jumping to {label} (PC = {self.pc})")
-            return True
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in JNE instruction: {str(e)}")
-            return False
-
-    def jl(self, label):
-        """Jump if less"""
-        start_time = time()
-        try:
-            if label not in self.labels:
-                raise ValueError(f"Undefined label: {label}")
-            if self.flags['sign'] and not self.flags['zero']:
-                self.pc = self.labels[label]
-            self.logger.log(LogLevel.DEBUG, f"JL: Jumping to {label} (PC = {self.pc})")
-            return True
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in JL instruction: {str(e)}")
-            return False
-
-    def jg(self, label):
-        """Jump if greater"""
-        start_time = time()
-        try:
-            if label not in self.labels:
-                raise ValueError(f"Undefined label: {label}")
-            if not self.flags['sign'] and not self.flags['zero']:
-                self.pc = self.labels[label]
-            self.logger.log(LogLevel.DEBUG, f"JG: Jumping to {label} (PC = {self.pc})")
-            return True
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in JG instruction: {str(e)}")
-            return False
-
-    def call(self, label):
-        """Call subroutine"""
-        start_time = time()
-        try:
-            if label not in self.labels:
-                raise ValueError(f"Undefined label: {label}")
-            # Save return address
-            self.registers['esp'] -= 4
-            self.memory.write(self.registers['esp'], self.pc + 1)
-            # Jump to subroutine
-            self.pc = self.labels[label]
-            self.logger.log(LogLevel.DEBUG, f"CALL: Jumping to {label} (PC = {self.pc})")
-            return True
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in CALL instruction: {str(e)}")
-            return False
-
-    def ret(self):
-        """Return from subroutine"""
-        start_time = time()
-        try:
-            # Restore return address
-            return_addr = self.memory.read(self.registers['esp'])
-            self.registers['esp'] += 4
-            self.pc = return_addr
-            self.logger.log(LogLevel.DEBUG, f"RET: Returning to {return_addr} (PC = {self.pc})")
-            return True
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in RET instruction: {str(e)}")
-            return False
-
-    def nop(self):
-        """No operation"""
-        start_time = time()
-        try:
-            self.logger.log(LogLevel.DEBUG, "NOP: No operation")
-            return True
-        except Exception as e:
-            self.logger.log(LogLevel.ERROR, f"Error in NOP instruction: {str(e)}")
-            return False
+        self.logger.log(LogLevel.INFO, "\nProgram completed:")
+        self.logger.log(LogLevel.INFO, f"Instructions executed: {self.instruction_count}")
+        self.logger.log(LogLevel.INFO, f"Execution time: {exec_time:.6f}s")
+        self.logger.log(LogLevel.INFO, f"Instructions per second: {ips:.2f}")
