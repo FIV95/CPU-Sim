@@ -313,29 +313,24 @@ class Cache:
         self._logger.log(LogLevel.DEBUG, f"Cache stats: hits={self._stats['hits']}, misses={self._stats['misses']}, "
                         f"hit_rate={self._stats['hits']/self._stats['reads'] if self._stats['reads'] > 0 else 0:.2%}")
 
+    def get_cache_state(self):
+        """Return the current state of the cache as a dictionary mapping (set_index, block_index) to data"""
+        state = {}
+        for set_idx in range(len(self._entries)):
+            for block_idx, entry in enumerate(self._entries[set_idx]):
+                if entry["valid"]:
+                    state[(set_idx, block_idx)] = entry["data"]
+        return state
+
     def get_performance_stats(self):
         """Get cache performance statistics"""
-        try:
-            hits = self._stats.get('hits', 0)
-            misses = self._stats.get('misses', 0)
-            total_accesses = hits + misses
-            hit_rate = (hits / total_accesses * 100) if total_accesses > 0 else 0.0
-            return {
-                'hits': hits,
-                'misses': misses,
-                'hit_rate': hit_rate,
-                'access_time': self._access_time,
-                'total_accesses': total_accesses
-            }
-        except Exception as e:
-            DEBUG.log(f"Error getting cache stats: {str(e)}")
-            return {
-                'hits': 0,
-                'misses': 0,
-                'hit_rate': 0.0,
-                'access_time': self._access_time,
-                'total_accesses': 0
-            }
+        total_accesses = self._stats['hits'] + self._stats['misses']
+        hit_rate = (self._stats['hits'] / total_accesses * 100) if total_accesses > 0 else 0
+        return {
+            'hits': self._stats['hits'],
+            'misses': self._stats['misses'],
+            'hit_rate': hit_rate
+        }
 
     def debug_info(self):
         """Get debug information about cache state"""

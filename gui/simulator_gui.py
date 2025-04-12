@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QHBoxLayout, QLabel, QPushButton, QFrame, QSlider,
-                            QTextEdit, QScrollArea, QTabWidget)
+                            QTextEdit, QScrollArea, QTabWidget, QGridLayout)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QPalette, QColor
 import sys
@@ -11,7 +11,7 @@ print("Starting simulator...")
 # Add the parent directory to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from isa import ISA
+from isa import SimpleISA
 from cache.cache import Cache
 from memory import MainMemory
 from utils.logger import Logger, LogLevel
@@ -23,7 +23,7 @@ class SimulatorGUI(QMainWindow):
         print("Initializing GUI...")
         super().__init__()
         self.setWindowTitle("CPU & Cache Simulator")
-        self.setMinimumSize(1280, 800)  # Reduced from 1400 to 1280
+        self.setMinimumSize(1280, 800)
         print("Window created...")
 
         # Initialize dictionaries for UI elements
@@ -34,15 +34,14 @@ class SimulatorGUI(QMainWindow):
         self.logger = Logger()
         self.logger.log_level = LogLevel.INFO
 
-        # Create memory hierarchy
+        # Create memory hierarchy with correct sizes
         print("Setting up memory hierarchy...")
-        self.main_memory = MainMemory("MainMemory", 100)
-        self.l2_cache = Cache("L2Cache", 32, 4, 4, 20, "write-back", self.main_memory, self.logger)
-        self.l1_cache = Cache("L1Cache", 16, 2, 4, 10, "write-back", self.l2_cache, self.logger)
+        self.main_memory = MainMemory("MainMemory", 1024)  # 1KB memory
+        self.l2_cache = Cache("L2Cache", 256, 1, 4, 30, "write-back", self.main_memory, self.logger)  # 256 bytes
+        self.l1_cache = Cache("L1Cache", 64, 1, 2, 10, "write-through", self.l2_cache, self.logger)   # 64 bytes
 
-        # Create ISA
-        self.isa = ISA()
-        self.isa.set_memory(self.l1_cache)
+        # Create ISA with memory and cache
+        self.isa = SimpleISA(memory=self.main_memory, cache=self.l1_cache)
 
         # Setup UI
         print("Setting up UI components...")
@@ -50,7 +49,7 @@ class SimulatorGUI(QMainWindow):
 
         # Initialize simulation state
         self.is_running = False
-        self.simulation_speed = 1000  # milliseconds between steps
+        self.simulation_speed = 1000
         self.current_instruction = 0
         self.instructions = []
 
@@ -60,7 +59,6 @@ class SimulatorGUI(QMainWindow):
         print("GUI initialization complete...")
 
     def setup_ui(self):
-        # Create central widget and main layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
@@ -68,34 +66,99 @@ class SimulatorGUI(QMainWindow):
         main_layout.setContentsMargins(8, 8, 8, 8)
 
         # Create sections
+        self.system_info_section = self.create_system_info_section()
         self.cpu_section = self.create_cpu_section()
         self.register_section = self.create_register_section()
         self.memory_section = self.create_memory_section()
-        self.ram_section = self.create_ram_section()
-        self.array_section = self.create_array_visualization()
         self.control_section = self.create_controls()
 
         # Add sections to main layout
+        main_layout.addWidget(self.system_info_section)
         main_layout.addWidget(self.cpu_section)
 
         # Create middle section with registers and cache
         middle_layout = QHBoxLayout()
         middle_layout.setSpacing(8)
-
-        # Add register section with equal stretch factor
-        middle_layout.addWidget(self.register_section, 50)  # Equal space
-        middle_layout.addWidget(self.memory_section, 50)  # Equal space
+        middle_layout.addWidget(self.register_section)
+        middle_layout.addWidget(self.memory_section)
 
         main_layout.addLayout(middle_layout)
-
-        # Create memory view window (hidden by default)
-        self.memory_window = QMainWindow(self)
-        self.memory_window.setWindowTitle("Memory View")
-        self.memory_window.setCentralWidget(self.ram_section)
-        self.memory_window.setMinimumSize(800, 300)  # Increased height
-
-        main_layout.addWidget(self.array_section)
         main_layout.addWidget(self.control_section)
+
+    def create_system_info_section(self):
+        frame = QFrame()
+        frame.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
+        layout = QVBoxLayout(frame)
+        layout.setSpacing(4)
+
+        # System Configuration title
+        title = QLabel("System Configuration")
+        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        layout.addWidget(title)
+
+        # Create grid for system info
+        grid = QGridLayout()
+        grid.setSpacing(8)
+
+        # Cache Configuration
+        cache_info = [
+            ("L1 Cache", "64 bytes", "1 byte", "2-way", "10ns", "Write-through"),
+            ("L2 Cache", "256 bytes", "1 byte", "4-way", "30ns", "Write-back"),
+            ("Main Memory", "1024 bytes", "N/A", "N/A", "100ns", "N/A")
+        ]
+
+        # Headers
+        headers = ["Component", "Size", "Line Size", "Associativity", "Access Time", "Write Policy"]
+        for col, header in enumerate(headers):
+            label = QLabel(header)
+            label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+            label.setStyleSheet("color: #00ff00;")
+            grid.addWidget(label, 0, col)
+
+        # Cache data
+        for row, (name, size, line, assoc, time, policy) in enumerate(cache_info, 1):
+            grid.addWidget(QLabel(name), row, 0)
+            grid.addWidget(QLabel(size), row, 1)
+            grid.addWidget(QLabel(line), row, 2)
+            grid.addWidget(QLabel(assoc), row, 3)
+            grid.addWidget(QLabel(time), row, 4)
+            grid.addWidget(QLabel(policy), row, 5)
+
+        layout.addLayout(grid)
+
+        # Register Configuration
+        reg_title = QLabel("Register Configuration")
+        reg_title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        reg_title.setStyleSheet("margin-top: 10px;")
+        layout.addWidget(reg_title)
+
+        reg_grid = QGridLayout()
+        reg_grid.setSpacing(8)
+
+        # Register headers
+        reg_headers = ["Register", "Purpose"]
+        for col, header in enumerate(reg_headers):
+            label = QLabel(header)
+            label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+            label.setStyleSheet("color: #00ff00;")
+            reg_grid.addWidget(label, 0, col)
+
+        # Register data
+        registers = [
+            ("eax", "General Purpose"),
+            ("ebx", "General Purpose"),
+            ("ecx", "General Purpose"),
+            ("edx", "General Purpose"),
+            ("esi", "Source Index"),
+            ("edi", "Destination Index")
+        ]
+
+        for row, (reg, purpose) in enumerate(registers, 1):
+            reg_grid.addWidget(QLabel(reg), row, 0)
+            reg_grid.addWidget(QLabel(purpose), row, 1)
+
+        layout.addLayout(reg_grid)
+        return frame
 
     def create_cpu_section(self):
         frame = QFrame()
@@ -132,141 +195,106 @@ class SimulatorGUI(QMainWindow):
         frame = QFrame()
         frame.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(4, 4, 4, 4)  # Minimal padding
-        layout.setSpacing(0)  # Remove spacing between elements
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
 
         # Header layout for title
         header_layout = QHBoxLayout()
-        header_layout.setContentsMargins(0, 0, 0, 4)  # Small bottom margin only
+        header_layout.setContentsMargins(0, 0, 0, 4)
 
-        # Registers title - minimal spacing
+        # Registers title
         title = QLabel("Registers")
         title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
         title.setContentsMargins(0, 0, 0, 0)
-        title.setFixedHeight(20)  # Fixed small height
         header_layout.addWidget(title)
-        header_layout.addStretch()  # Push title to the left
+        header_layout.addStretch()
         layout.addLayout(header_layout)
 
-        # Create register grid (8 rows x 4 columns)
-        register_grid = QHBoxLayout()
-        register_grid.setSpacing(4)  # Small spacing between columns
+        # Create register grid for our actual registers
+        register_grid = QVBoxLayout()
+        register_grid.setSpacing(4)
         register_grid.setContentsMargins(0, 0, 0, 0)
 
-        for col in range(4):
-            col_layout = QVBoxLayout()
-            col_layout.setSpacing(2)  # Slightly increased spacing between registers
-            col_layout.setContentsMargins(0, 0, 0, 0)
-            for row in range(8):
-                reg_num = col * 8 + row
-                reg_frame = QFrame()
-                reg_frame.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
-                reg_frame.setStyleSheet("""
-                    QFrame {
-                        background-color: #1e1e1e;
-                        border: 1px solid #ffaa00;
-                        border-radius: 2px;
-                    }
-                """)
-                reg_layout = QHBoxLayout(reg_frame)
-                reg_layout.setContentsMargins(4, 2, 4, 2)  # Slightly increased vertical padding
-                reg_layout.setSpacing(4)  # Small spacing between name and value
+        # Define our actual registers
+        registers = ['eax', 'ebx', 'ecx', 'edx', 'esi', 'edi']
+        self.register_labels = {}
 
-                reg_name = QLabel(f"R{reg_num}")
-                reg_name.setFont(QFont("Courier", 11))
-                reg_name.setStyleSheet("QLabel { color: #888888; }")
-                reg_name.setFixedWidth(32)  # Slightly smaller width for register names
-                reg_layout.addWidget(reg_name)
+        for reg_name in registers:
+            reg_frame = QFrame()
+            reg_frame.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
+            reg_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #1e1e1e;
+                    border: 1px solid #ffaa00;
+                    border-radius: 2px;
+                }
+            """)
+            reg_layout = QHBoxLayout(reg_frame)
+            reg_layout.setContentsMargins(4, 2, 4, 2)
+            reg_layout.setSpacing(4)
 
-                value_label = QLabel("0")
-                value_label.setFont(QFont("Courier", 11, QFont.Weight.Bold))
-                value_label.setStyleSheet("QLabel { color: #ffaa00; }")
-                value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-                value_label.setMinimumWidth(45)  # Ensure enough width for values
-                self.register_labels[f"R{reg_num}"] = value_label
-                reg_layout.addWidget(value_label)
+            reg_label = QLabel(reg_name)
+            reg_label.setFont(QFont("Courier", 11))
+            reg_label.setStyleSheet("QLabel { color: #888888; }")
+            reg_label.setFixedWidth(32)
+            reg_layout.addWidget(reg_label)
 
-                reg_frame.setFixedHeight(24)  # Slightly increased height
-                col_layout.addWidget(reg_frame)
-            register_grid.addLayout(col_layout)
+            value_label = QLabel("0")
+            value_label.setFont(QFont("Courier", 11, QFont.Weight.Bold))
+            value_label.setStyleSheet("QLabel { color: #ffaa00; }")
+            value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+            value_label.setMinimumWidth(45)
+            self.register_labels[reg_name] = value_label
+            reg_layout.addWidget(value_label)
+
+            reg_frame.setFixedHeight(24)
+            register_grid.addWidget(reg_frame)
+
+        # Add stretch to push registers to the top
+        register_grid.addStretch()
 
         # Create a widget to hold the register grid
         register_container = QWidget()
         register_container.setLayout(register_grid)
-
-        # Create a scroll area to contain the register grid
-        scroll_area = QScrollArea()
-        scroll_area.setWidget(register_container)
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameStyle(QFrame.Shape.NoFrame)  # Remove the scroll area border
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Hide vertical scrollbar
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Hide horizontal scrollbar
-
-        layout.addWidget(scroll_area)
+        layout.addWidget(register_container)
 
         # Set a fixed size for the entire register section
-        frame.setFixedWidth(400)  # Keep width the same
+        frame.setFixedWidth(200)
         return frame
 
     def create_memory_section(self):
         frame = QFrame()
         frame.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(8, 8, 8, 8)  # Increased padding
-        layout.setSpacing(6)  # Increased spacing
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
 
-        # Create header with title and memory view button
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(8)
-
-        # Memory Hierarchy title
-        title = QLabel("Cache Hierarchy")
+        # Create header with title
+        title = QLabel("Cache Status")
         title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        title.setContentsMargins(0, 0, 0, 0)
-        header_layout.addWidget(title)
+        layout.addWidget(title)
 
-        # Add stretch to push the button to the right
-        header_layout.addStretch(1)
-
-        # Create memory view button with better styling
-        self.memory_view_button = QPushButton("Memory")
-        self.memory_view_button.setFixedSize(80, 30)  # Smaller fixed size
-        self.memory_view_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2b2b2b;
-                color: #00ff00;
-                border: 1px solid #00ff00;
-                border-radius: 4px;
-                padding: 2px;
-                font-size: 10pt;
-            }
-            QPushButton:hover {
-                background-color: #3b3b3b;
-            }
-        """)
-        self.memory_view_button.clicked.connect(self.toggle_memory_view)
-        header_layout.addWidget(self.memory_view_button)
-
-        layout.addLayout(header_layout)
-
-        # L1 Cache (Fastest)
-        l1_title = QLabel("L1 Cache (Fastest)")
+        # L1 Cache (2-way set associative)
+        l1_title = QLabel("L1 Cache (2-way)")
         l1_title.setFont(QFont("Arial", 11))
-        l1_title.setStyleSheet("QLabel { color: #ff69b4; }") # Hot pink for L1
+        l1_title.setStyleSheet("QLabel { color: #ff69b4; }")
         layout.addWidget(l1_title)
 
-        # L1 Cache blocks (2 sets x 2 blocks)
+        # L1 Cache visualization
         self.l1_blocks = {}
-        l1_grid = QVBoxLayout()
-        l1_grid.setSpacing(6)  # Increased spacing between sets
-        for set_idx in range(2):
-            set_layout = QHBoxLayout()
-            set_layout.setSpacing(8)  # Increased spacing between blocks
-            set_label = QLabel(f"Set {set_idx}:")
-            set_label.setFont(QFont("Courier", 10))
+        l1_grid = QGridLayout()
+        l1_grid.setSpacing(4)
+
+        # Headers for L1
+        l1_grid.addWidget(QLabel("Set"), 0, 0)
+        l1_grid.addWidget(QLabel("Block 0"), 0, 1)
+        l1_grid.addWidget(QLabel("Block 1"), 0, 2)
+
+        # Create L1 cache blocks (32 sets, 2 blocks each)
+        for set_idx in range(32):  # 64 bytes / 1 byte per line / 2-way = 32 sets
+            set_label = QLabel(f"{set_idx}")
             set_label.setStyleSheet("QLabel { color: #888888; }")
-            set_label.setFixedWidth(60)  # Fixed width for set labels
-            set_layout.addWidget(set_label)
+            l1_grid.addWidget(set_label, set_idx + 1, 0)
 
             for block_idx in range(2):
                 block = QFrame()
@@ -274,52 +302,57 @@ class SimulatorGUI(QMainWindow):
                 block.setStyleSheet("""
                     QFrame {
                         background-color: #1e1e1e;
-                        border: 2px solid #ff69b4;
-                        border-radius: 4px;
-                        padding: 4px;
+                        border: 1px solid #ff69b4;
+                        border-radius: 2px;
+                        min-height: 20px;
                     }
                 """)
-                block_layout = QVBoxLayout(block)
-                block_layout.setContentsMargins(6, 6, 6, 6)
-                block_layout.setSpacing(4)
+                block_layout = QHBoxLayout(block)
+                block_layout.setContentsMargins(2, 2, 2, 2)
 
-                tag_label = QLabel("Tag: None")
-                tag_label.setFont(QFont("Courier", 10))
-                tag_label.setStyleSheet("QLabel { color: #888888; }")
-                block_layout.addWidget(tag_label)
+                value_label = QLabel("0")
+                value_label.setStyleSheet("QLabel { color: #ff69b4; }")
+                value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                block_layout.addWidget(value_label)
 
-                data_label = QLabel("Data: None")
-                data_label.setFont(QFont("Courier", 10))
-                data_label.setStyleSheet("QLabel { color: #ff69b4; }")
-                block_layout.addWidget(data_label)
+                self.l1_blocks[f"{set_idx}_{block_idx}"] = value_label
+                l1_grid.addWidget(block, set_idx + 1, block_idx + 1)
 
-                self.l1_blocks[f"{set_idx}_{block_idx}"] = (tag_label, data_label)
-                set_layout.addWidget(block)
+        # Create a widget to hold the L1 grid
+        l1_container = QWidget()
+        l1_container.setLayout(l1_grid)
 
-            l1_grid.addLayout(set_layout)
-        layout.addLayout(l1_grid)
+        # Create a scroll area for L1 cache
+        l1_scroll = QScrollArea()
+        l1_scroll.setWidget(l1_container)
+        l1_scroll.setWidgetResizable(True)
+        l1_scroll.setMaximumHeight(200)
+        layout.addWidget(l1_scroll)
 
         # Add spacing between caches
         layout.addSpacing(12)
 
-        # L2 Cache (Slower)
-        l2_title = QLabel("L2 Cache (Slower)")
+        # L2 Cache (4-way set associative)
+        l2_title = QLabel("L2 Cache (4-way)")
         l2_title.setFont(QFont("Arial", 11))
-        l2_title.setStyleSheet("QLabel { color: #9370db; }") # Medium purple for L2
+        l2_title.setStyleSheet("QLabel { color: #9370db; }")
         layout.addWidget(l2_title)
 
-        # L2 Cache blocks (4 sets x 4 blocks)
+        # L2 Cache visualization
         self.l2_blocks = {}
-        l2_grid = QVBoxLayout()
-        l2_grid.setSpacing(6)  # Increased spacing between sets
-        for set_idx in range(4):
-            set_layout = QHBoxLayout()
-            set_layout.setSpacing(8)  # Increased spacing between blocks
-            set_label = QLabel(f"Set {set_idx}:")
-            set_label.setFont(QFont("Courier", 10))
+        l2_grid = QGridLayout()
+        l2_grid.setSpacing(4)
+
+        # Headers for L2
+        l2_grid.addWidget(QLabel("Set"), 0, 0)
+        for i in range(4):
+            l2_grid.addWidget(QLabel(f"Block {i}"), 0, i + 1)
+
+        # Create L2 cache blocks (64 sets, 4 blocks each)
+        for set_idx in range(64):  # 256 bytes / 1 byte per line / 4-way = 64 sets
+            set_label = QLabel(f"{set_idx}")
             set_label.setStyleSheet("QLabel { color: #888888; }")
-            set_label.setFixedWidth(60)  # Fixed width for set labels
-            set_layout.addWidget(set_label)
+            l2_grid.addWidget(set_label, set_idx + 1, 0)
 
             for block_idx in range(4):
                 block = QFrame()
@@ -327,95 +360,41 @@ class SimulatorGUI(QMainWindow):
                 block.setStyleSheet("""
                     QFrame {
                         background-color: #1e1e1e;
-                        border: 2px solid #9370db;
-                        border-radius: 4px;
-                        padding: 4px;
+                        border: 1px solid #9370db;
+                        border-radius: 2px;
+                        min-height: 20px;
                     }
                 """)
-                block_layout = QVBoxLayout(block)
-                block_layout.setContentsMargins(6, 6, 6, 6)
-                block_layout.setSpacing(4)
+                block_layout = QHBoxLayout(block)
+                block_layout.setContentsMargins(2, 2, 2, 2)
 
-                tag_label = QLabel("Tag: None")
-                tag_label.setFont(QFont("Courier", 10))
-                tag_label.setStyleSheet("QLabel { color: #888888; }")
-                block_layout.addWidget(tag_label)
+                value_label = QLabel("0")
+                value_label.setStyleSheet("QLabel { color: #9370db; }")
+                value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                block_layout.addWidget(value_label)
 
-                data_label = QLabel("Data: None")
-                data_label.setFont(QFont("Courier", 10))
-                data_label.setStyleSheet("QLabel { color: #9370db; }")
-                block_layout.addWidget(data_label)
+                self.l2_blocks[f"{set_idx}_{block_idx}"] = value_label
+                l2_grid.addWidget(block, set_idx + 1, block_idx + 1)
 
-                self.l2_blocks[f"{set_idx}_{block_idx}"] = (tag_label, data_label)
-                set_layout.addWidget(block)
+        # Create a widget to hold the L2 grid
+        l2_container = QWidget()
+        l2_container.setLayout(l2_grid)
 
-            l2_grid.addLayout(set_layout)
-        layout.addLayout(l2_grid)
+        # Create a scroll area for L2 cache
+        l2_scroll = QScrollArea()
+        l2_scroll.setWidget(l2_container)
+        l2_scroll.setWidgetResizable(True)
+        l2_scroll.setMaximumHeight(200)
+        layout.addWidget(l2_scroll)
 
-        return frame
-
-    def create_ram_section(self):
-        frame = QFrame()
-        frame.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
-        layout = QVBoxLayout(frame)
-
-        # Main Memory (RAM)
-        mem_level = QLabel("Main Memory (RAM)")
-        mem_level.setFont(QFont("Arial", 11))
-        mem_level.setStyleSheet("QLabel { color: #00ff00; }") # Green for RAM
-        layout.addWidget(mem_level)
-
-        # Memory array visualization in a grid (2 rows x 5 columns)
-        self.memory_labels = {}
-        memory_grid = QVBoxLayout()
-
-        row1 = QHBoxLayout()
-        row2 = QHBoxLayout()
-        for i in range(10):
-            cell = QFrame()
-            cell.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
-            cell.setStyleSheet("QFrame { background-color: #1e1e1e; border: 2px solid #00ff00; border-radius: 3px; }")
-            cell_layout = QVBoxLayout(cell)
-            cell_layout.setContentsMargins(5, 5, 5, 5)
-
-            addr_label = QLabel(f"Addr {i}")
-            addr_label.setFont(QFont("Courier", 11))
-            addr_label.setStyleSheet("QLabel { color: #888888; }")
-            addr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            cell_layout.addWidget(addr_label)
-
-            value_label = QLabel("0")
-            value_label.setFont(QFont("Courier", 12, QFont.Weight.Bold))
-            value_label.setStyleSheet("QLabel { color: #00ff00; }")
-            value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.memory_labels[i] = value_label
-            cell_layout.addWidget(value_label)
-
-            cell.setMinimumWidth(100)
-            cell.setMinimumHeight(60)
-
-            if i < 5:
-                row1.addWidget(cell)
-            else:
-                row2.addWidget(cell)
-
-        memory_grid.addLayout(row1)
-        memory_grid.addLayout(row2)
-        layout.addLayout(memory_grid)
-
-        return frame
-
-    def create_array_visualization(self):
-        frame = QFrame()
-        frame.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
-        layout = QVBoxLayout(frame)
-        layout.setContentsMargins(5, 5, 5, 5)  # Reduce margins
-
-        # Array visualization
-        self.array_visualization = QLabel()
-        self.array_visualization.setFont(QFont("Courier", 12))
-        self.array_visualization.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.array_visualization)
+        # Add cache statistics
+        stats_frame = QFrame()
+        stats_layout = QVBoxLayout(stats_frame)
+        self.l1_stats_label = QLabel("L1 Cache: Hits: 0, Misses: 0, Hit Rate: 0%")
+        self.l2_stats_label = QLabel("L2 Cache: Hits: 0, Misses: 0, Hit Rate: 0%")
+        stats_layout.addWidget(self.l1_stats_label)
+        stats_layout.addWidget(self.l2_stats_label)
+        layout.addWidget(stats_frame)
 
         return frame
 
@@ -423,22 +402,45 @@ class SimulatorGUI(QMainWindow):
         frame = QFrame()
         frame.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
         layout = QHBoxLayout(frame)
+        layout.setContentsMargins(8, 8, 8, 8)
 
-        # Control buttons
+        # Control buttons with better styling
+        button_style = """
+            QPushButton {
+                background-color: #2b2b2b;
+                color: #00ff00;
+                border: 1px solid #00ff00;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-size: 12pt;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #3b3b3b;
+            }
+            QPushButton:pressed {
+                background-color: #1b1b1b;
+            }
+        """
+
         self.step_button = QPushButton("Step")
         self.step_button.clicked.connect(self.step_execution)
+        self.step_button.setStyleSheet(button_style)
         layout.addWidget(self.step_button)
 
         self.run_button = QPushButton("Run")
         self.run_button.clicked.connect(self.toggle_run)
+        self.run_button.setStyleSheet(button_style)
         layout.addWidget(self.run_button)
 
         self.reset_button = QPushButton("Reset")
         self.reset_button.clicked.connect(self.reset_simulation)
+        self.reset_button.setStyleSheet(button_style)
         layout.addWidget(self.reset_button)
 
         # Speed control
         speed_label = QLabel("Speed:")
+        speed_label.setStyleSheet("QLabel { color: #00ff00; font-size: 12pt; }")
         layout.addWidget(speed_label)
 
         self.speed_slider = QSlider(Qt.Orientation.Horizontal)
@@ -446,6 +448,22 @@ class SimulatorGUI(QMainWindow):
         self.speed_slider.setMaximum(2000)
         self.speed_slider.setValue(1000)
         self.speed_slider.valueChanged.connect(self.update_speed)
+        self.speed_slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                border: 1px solid #00ff00;
+                height: 8px;
+                background: #2b2b2b;
+                margin: 2px 0;
+                border-radius: 4px;
+            }
+            QSlider::handle:horizontal {
+                background: #00ff00;
+                border: 1px solid #00ff00;
+                width: 18px;
+                margin: -2px 0;
+                border-radius: 9px;
+            }
+        """)
         layout.addWidget(self.speed_slider)
 
         return frame
@@ -454,26 +472,57 @@ class SimulatorGUI(QMainWindow):
         """Load instructions from file"""
         try:
             with open(filename, 'r') as f:
-                self.instructions = [line.strip() for line in f if line.strip() and not line.strip().startswith('#')]
+                # Filter out empty lines and comments
+                self.instructions = []
+                for line in f:
+                    line = line.strip()
+                    # Skip empty lines and comment-only lines
+                    if not line or line.startswith(';'):
+                        continue
+                    # For lines with inline comments, only keep the instruction part
+                    if ';' in line:
+                        line = line.split(';')[0].strip()
+                    if line:  # Only add non-empty lines
+                        self.instructions.append(line)
+
             self.current_instruction = 0
+            self.instruction_label.setText("Current Instruction: None")
+            self.pc_label.setText("Program Counter: 0x00")
+            self.status_label.setText("Status: Ready")
             self.update_display()
         except Exception as e:
-            self.status_label.setText("Status: Error loading instructions")
+            self.status_label.setText(f"Status: Error loading instructions - {str(e)}")
 
     def step_execution(self):
         """Execute one instruction and update display"""
         if self.current_instruction < len(self.instructions):
             instruction = self.instructions[self.current_instruction]
+            # Show a cleaner instruction display (without any trailing comments)
             self.instruction_label.setText(f"Current Instruction: {instruction}")
             self.pc_label.setText(f"Program Counter: 0x{self.current_instruction:02x}")
             self.status_label.setText("Status: Executing...")
 
-            # Execute instruction
-            result = self.isa.parse_line(instruction)
-            if result:
-                self.status_label.setText("Status: Instruction Complete")
-            else:
-                self.status_label.setText("Status: Execution Failed")
+            # Load and execute instruction
+            try:
+                # First load the program if we haven't already
+                if self.current_instruction == 0:
+                    self.isa.load_program(self.instructions)
+
+                # Execute one step
+                result = self.isa.execute_step()
+                if result:
+                    self.status_label.setText("Status: Instruction Complete")
+                else:
+                    self.status_label.setText("Status: Program Halted")
+                    self.timer.stop()
+                    self.is_running = False
+                    self.run_button.setText("Run")
+
+            except Exception as e:
+                self.status_label.setText(f"Status: Error - {str(e)}")
+                self.timer.stop()
+                self.is_running = False
+                self.run_button.setText("Run")
 
             self.current_instruction += 1
             self.update_display()
@@ -496,8 +545,7 @@ class SimulatorGUI(QMainWindow):
     def reset_simulation(self):
         """Reset the simulation to initial state"""
         self.current_instruction = 0
-        self.isa = ISA()
-        self.isa.set_memory(self.l1_cache)
+        self.isa = SimpleISA(memory=self.main_memory, cache=self.l1_cache)
         self.status_label.setText("Status: Ready")
         self.instruction_label.setText("Current Instruction: None")
         self.pc_label.setText("Program Counter: 0x00")
@@ -514,56 +562,47 @@ class SimulatorGUI(QMainWindow):
     def update_display(self):
         """Update all visual elements based on current state"""
         # Update registers
-        for i in range(32):
-            reg_name = f"R{i}"
-            value = self.isa.registers.read(reg_name)
-            self.register_labels[reg_name].setText(f"{value if value is not None else 0}")
-
-        # Update memory
-        for i in range(10):
-            value = self.isa.memory.read(i)
-            self.memory_labels[i].setText(f"{value if value is not None else 0}")
+        for reg_name in ['eax', 'ebx', 'ecx', 'edx', 'esi', 'edi']:
+            value = self.isa.registers.get(reg_name, 0)
+            self.register_labels[reg_name].setText(f"{value}")
 
         # Update L1 Cache blocks
-        l1_info = self.l1_cache.debug_info()
-        if 'blocks' in l1_info:
-            for set_idx in range(2):
+        l1_info = self.l1_cache.get_cache_state()
+        if l1_info:
+            for set_idx in range(32):  # 64 bytes / 1 byte per line / 2-way = 32 sets
                 for block_idx in range(2):
                     block_key = f"{set_idx}_{block_idx}"
-                    block_info = l1_info['blocks'].get(block_key, {})
-                    tag_label, data_label = self.l1_blocks[block_key]
-
-                    tag = block_info.get('tag', 'None')
-                    data = block_info.get('data', 'None')
-                    tag_label.setText(f"Tag: {tag}")
-                    data_label.setText(f"Data: {data}")
+                    value_label = self.l1_blocks[block_key]
+                    # Get the value from the cache state
+                    value = l1_info.get((set_idx, block_idx), 0)
+                    value_label.setText(f"{value}")
 
         # Update L2 Cache blocks
-        l2_info = self.l2_cache.debug_info()
-        if 'blocks' in l2_info:
-            for set_idx in range(4):
+        l2_info = self.l2_cache.get_cache_state()
+        if l2_info:
+            for set_idx in range(64):  # 256 bytes / 1 byte per line / 4-way = 64 sets
                 for block_idx in range(4):
                     block_key = f"{set_idx}_{block_idx}"
-                    block_info = l2_info['blocks'].get(block_key, {})
-                    tag_label, data_label = self.l2_blocks[block_key]
+                    value_label = self.l2_blocks[block_key]
+                    # Get the value from the cache state
+                    value = l2_info.get((set_idx, block_idx), 0)
+                    value_label.setText(f"{value}")
 
-                    tag = block_info.get('tag', 'None')
-                    data = block_info.get('data', 'None')
-                    tag_label.setText(f"Tag: {tag}")
-                    data_label.setText(f"Data: {data}")
+        # Update cache statistics
+        l1_stats = self.l1_cache.get_performance_stats()
+        l2_stats = self.l2_cache.get_performance_stats()
 
-        # Update array visualization
-        array_data = [self.isa.memory.read(i) for i in range(10)]
-        array_str = " ".join(f"{x if x is not None else 0:3}" for x in array_data)
-        self.array_visualization.setText(array_str)
+        self.l1_stats_label.setText(
+            f"L1 Cache: Hits: {l1_stats['hits']}, "
+            f"Misses: {l1_stats['misses']}, "
+            f"Hit Rate: {l1_stats['hit_rate']:.2f}%"
+        )
 
-    def toggle_memory_view(self):
-        if self.memory_window.isVisible():
-            self.memory_window.hide()
-            self.memory_view_button.setText("Show Memory View")
-        else:
-            self.memory_window.show()
-            self.memory_view_button.setText("Hide Memory View")
+        self.l2_stats_label.setText(
+            f"L2 Cache: Hits: {l2_stats['hits']}, "
+            f"Misses: {l2_stats['misses']}, "
+            f"Hit Rate: {l2_stats['hit_rate']:.2f}%"
+        )
 
 def main():
     print("Starting main application...")
@@ -571,8 +610,12 @@ def main():
     print("Created QApplication...")
     window = SimulatorGUI()
     print("Created main window...")
-    window.load_instructions("ex9_instructions")
-    print("Loaded instructions...")
+
+    # Get test file from command line or use default
+    test_file = sys.argv[1] if len(sys.argv) > 1 else 'tests/test_program.txt'
+    window.load_instructions(test_file)
+    print(f"Loaded instructions from {test_file}...")
+
     window.show()
     print("Showing window...")
     sys.exit(app.exec())
