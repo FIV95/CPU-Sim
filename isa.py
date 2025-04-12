@@ -24,6 +24,7 @@ class InstructionType(Enum):
     DEC = auto()    # Decrement value
     NOT = auto()    # Bitwise NOT
     AND = auto()    # Bitwise AND
+    OR = auto()     # Bitwise OR
     JMP = auto()    # Unconditional jump
     JZ = auto()     # Jump if zero
     JNZ = auto()    # Jump if not zero
@@ -142,6 +143,8 @@ class SimpleISA:
                 self._execute_not(instruction.operands)
             elif instruction.type == InstructionType.AND:
                 self._execute_and(instruction.operands)
+            elif instruction.type == InstructionType.OR:
+                self._execute_or(instruction.operands)
             elif instruction.type == InstructionType.JMP:
                 next_pc = self._execute_jmp(instruction.operands)
             elif instruction.type == InstructionType.JZ:
@@ -322,6 +325,36 @@ class SimpleISA:
             'dest': dest,
             'value': value,
             'result': self.registers[dest]
+        })
+
+    def _execute_or(self, operands: List[str]) -> None:
+        """Execute OR instruction"""
+        if len(operands) != 2:
+            raise ValueError("OR requires 2 operands")
+
+        dest, src = operands
+        if not dest in self.registers:
+            raise ValueError(f"Invalid destination register: {dest}")
+
+        # Get source value
+        if src.startswith('#'):
+            src_value = int(src[1:])
+        elif src in self.registers:
+            src_value = self.registers[src]
+        else:
+            raise ValueError(f"Invalid source operand: {src}")
+
+        # Perform bitwise OR
+        result = self.registers[dest] | src_value
+
+        # Update destination register
+        self.registers[dest] = result
+
+        # Log register operation
+        self.logger.log_register_operation('or', {
+            'dest': dest,
+            'value': result,
+            'source': src
         })
 
     def _execute_jmp(self, operands: List[str]) -> int:

@@ -1,0 +1,29 @@
+;===============================================
+; Test Name: AND Instruction Test
+; Description: Tests the AND instruction functionality including:
+;   - Register to register AND operations
+;   - Immediate value AND operations
+;   - Bitwise operations verification
+;
+; Expected Results:
+;   - Final register values:
+;     * eax = 8 (0b1000, result of 10 AND 12)
+;     * ebx = 12 (0b1100, unchanged)
+;     * edx = 10 (0b1010, result of 10 AND 15)
+;   - Cache performance:
+;     * Should show hits for register operations
+;     * No memory operations expected
+;===============================================
+
+; Initialize registers with test values
+MOV eax #10    ; 0b1010
+MOV ebx #12    ; 0b1100
+
+; Test AND between registers
+AND eax ebx    ; eax = 0b1000 (8)
+
+; Test AND with immediate value
+MOV edx #10    ; Reset edx to 0b1010
+AND edx #15    ; edx = 0b1010 (10)
+
+HALT

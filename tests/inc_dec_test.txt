@@ -1,0 +1,29 @@
+;===============================================
+; Test Name: INC/DEC Instruction Test
+; Description: Tests if the ISA can handle increment/decrement operations by:
+;   - Using INC to increment register values
+;   - Using DEC to decrement register values
+;
+; Instructions Tested:
+;   - INC: Increment register value by 1
+;   - DEC: Decrement register value by 1
+;   - MOV: Set initial register values
+;
+; Expected Results:
+;   - Register values correctly increment/decrement
+;   - Operations maintain correct register state
+;===============================================
+
+; Initialize register
+MOV eax #5     ; Set initial value
+
+; Test increment
+INC eax        ; eax = 6
+INC eax        ; eax = 7
+
+; Test decrement
+DEC eax        ; eax = 6
+DEC eax        ; eax = 5
+
+; End program
+HALT

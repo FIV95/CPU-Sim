@@ -1,0 +1,29 @@
+;===============================================
+; Test Name: OR Instruction Test
+; Description: Tests the OR instruction functionality including:
+;   - Register to register OR operations
+;   - Immediate value OR operations
+;   - Bitwise operations verification
+;
+; Expected Results:
+;   - Final register values:
+;     * eax = 15 (0b1111, result of 10 OR 5)
+;     * ebx = 5 (0b0101, unchanged)
+;     * edx = 63 (0b111111, result of 60 OR 15)
+;   - Cache performance:
+;     * Should show hits for register operations
+;     * No memory operations expected
+;===============================================
+
+; Initialize registers with test values
+MOV eax #10    ; 0b1010
+MOV ebx #5     ; 0b0101
+
+; Test OR between registers
+OR eax ebx     ; eax = 0b1111 (15)
+
+; Test OR with immediate value
+MOV edx #60    ; 0b111100
+OR edx #15     ; edx = 0b111111 (63)
+
+HALT

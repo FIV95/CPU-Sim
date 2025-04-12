@@ -1,0 +1,31 @@
+;===============================================
+; Test Name: Cache Behavior Test
+; Description: Tests cache hit/miss patterns by:
+;   - Writing values to memory
+;   - Reading same locations multiple times
+;   - Testing different cache sets
+;
+; Expected Results:
+;   - First access to each location: cache miss
+;   - Subsequent accesses: cache hits
+;   - Cache statistics should show:
+;     * Multiple hits after initial misses
+;     * Demonstration of different cache sets
+;===============================================
+
+; Write initial values to memory
+MOV [100] #42   ; Set 4 in L1 cache
+MOV [104] #123  ; Set 8 in L1 cache
+MOV [108] #255  ; Set 12 in L1 cache
+
+; First round of reads (should be hits after the writes)
+LOAD eax [100]  ; Should be in L1 cache
+LOAD ebx [104]  ; Should be in L1 cache
+LOAD ecx [108]  ; Should be in L1 cache
+
+; Second round of reads (should all be hits)
+LOAD edx [100]  ; Definite L1 cache hit
+LOAD esi [104]  ; Definite L1 cache hit
+LOAD edi [108]  ; Definite L1 cache hit
+
+HALT

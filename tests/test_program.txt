@@ -4,7 +4,7 @@
 ;   - Register operations (MOV)
 ;   - Memory operations (LOAD)
 ;   - Arithmetic (ADD, SUB, INC, DEC)
-;   - Logical (NOT, AND)
+;   - Logical (NOT, AND, OR)
 ;   - Control flow (JMP, JZ, JNZ)
 ;   - Cache behavior
 ;
@@ -13,7 +13,7 @@
 ;     * eax = 0 (counted down from 10)
 ;     * ebx = 6 (incremented then decremented)
 ;     * ecx = 12 (loop counter)
-;     * edx = 42 (from memory, then AND operations)
+;     * edx = 12 (after AND operations)
 ;     * esi = 123 (from memory)
 ;     * edi = 15 (after AND operations)
 ;   - Cache performance:
@@ -53,6 +53,12 @@ MOV edi #31    ; edi = 31 (0b11111)
 AND edi #15    ; edi = 15 (0b01111)
 MOV edx #60    ; edx = 60 (0b111100)
 AND edx edi    ; edx = 12 (0b001100)
+
+; Test OR instructions
+MOV esi #36    ; esi = 36 (0b100100)
+OR esi #18     ; esi = 54 (0b110110)
+MOV edi #5     ; edi = 5 (0b00101)
+OR edi esi     ; edi = 55 (0b110111)
 
 ; Loop to demonstrate jumps
 loop_start:

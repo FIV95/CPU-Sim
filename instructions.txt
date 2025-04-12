@@ -41,6 +41,16 @@ NOT   ; Bitwise NOT (invert all bits)
       ; Examples:
       ;   NOT eax         ; eax = ~eax (invert all bits)
 
+AND   ; Bitwise AND between two values
+      ; Examples:
+      ;   AND eax ebx     ; eax = eax & ebx (bitwise AND)
+      ;   AND eax #15     ; eax = eax & 15
+
+OR    ; Bitwise OR between two values
+      ; Examples:
+      ;   OR eax ebx      ; eax = eax | ebx (bitwise OR)
+      ;   OR eax #15      ; eax = eax | 15
+
 ; Control Flow
 ;------------
 JMP   ; Unconditional jump to label
