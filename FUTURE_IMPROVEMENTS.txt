@@ -1,0 +1,183 @@
+# Future Improvements
+
+## Write-Back Cache Implementation
+
+### Current Limitations
+- Write-through policy means every write goes directly to memory
+- Cache only provides benefit for read operations
+- Not utilizing cache's full potential for write operations
+- Unrealistic memory access patterns
+
+### Required Changes
+
+1. ISA Execution (`isa.py`):
+   - Modify all memory operations
+   - Update register value handling
+   - Change memory address operations
+   - Revise execution step logic
+
+2. Cache Implementation (`cache/cache.py`):
+   - Add dirty bit tracking
+   - Implement write-back logic
+   - Handle cache line eviction
+   - Update write policy implementation
+
+3. Memory Operations:
+   - Revise MOV instructions with memory
+   - Update LOAD/STORE operations
+   - Modify memory access patterns
+   - Change data propagation
+
+4. Instruction Set:
+   - Consider new cache control instructions
+   - Add explicit cache flush instructions
+   - Implement memory barrier instructions
+
+5. Test Suite:
+   - Update all test files
+   - Modify test expectations
+   - Add cache flush operations
+   - Update performance metrics
+
+6. Logging/Output:
+   - Revise operation logging
+   - Update cache state display
+   - Modify performance statistics
+
+### Benefits
+- More realistic memory behavior
+- Better cache utilization
+- Improved write performance
+- Reduced memory traffic
+- Better locality of reference
+
+### Considerations
+- Major architectural change
+- Extensive testing required
+- All components need updates
+- Significant development effort
+
+### Implementation Priority
+- Consider as future enhancement
+- Requires careful planning
+- Need comprehensive testing strategy
+- Should be done as a separate branch
+
+## Split Cache Architecture (Harvard Architecture)
+
+### Current Limitations
+- Single unified cache for both instructions and data
+- No separation of instruction and data access patterns
+- Missing benefits of specialized caches
+- Less realistic processor architecture
+
+### Required Changes
+
+1. Cache System:
+   - Split L1 cache into Instruction Cache (I-cache) and Data Cache (D-cache)
+   - Implement separate access patterns for each cache
+   - Create distinct replacement policies
+   - Handle instruction fetches separately from data access
+   - Track statistics independently
+
+2. ISA Execution:
+   - Modify instruction fetch mechanism
+   - Update memory access routing
+   - Change execution pipeline
+   - Handle cache misses differently for instructions vs data
+
+3. Memory Operations:
+   - Implement separate paths for instruction and data
+   - Update memory access patterns
+   - Modify cache coherency
+   - Handle instruction prefetching
+
+4. Test Suite:
+   - Create separate tests for instruction and data caches
+   - Update performance metrics
+   - Add new test cases
+   - Modify test expectations
+
+5. Logging/Output:
+   - Implement separate statistics tracking
+   - Update display format
+   - Modify performance reporting
+   - Change debug output
+
+### Benefits
+- More realistic processor architecture
+- Better instruction fetch performance
+- Optimized cache access patterns
+- Reduced cache conflicts
+- Parallel access to instructions and data
+
+### Considerations
+- Major architectural change
+- Complex implementation
+- Extensive testing required
+- Significant performance impact
+
+### Implementation Priority
+- Consider as future enhancement
+- Requires careful planning
+- Need comprehensive testing strategy
+- Should be done as a separate branch
+
+# Cache Line Size Enhancement
+
+## Current Implementation
+- Current cache line size is set to 1 byte for both L1 and L2 caches
+- This simplification was chosen to:
+  - Simplify address calculations and set mapping
+  - Work seamlessly with Python's variable handling
+  - Make cache behavior more predictable for educational purposes
+  - Enable straightforward visualization in the GUI
+  - Facilitate easier testing and verification
+
+## Proposed Enhancement
+Implement more realistic cache line sizes (e.g., 32 or 64 bytes) to better reflect real hardware.
+
+### Required Changes
+1. Cache Implementation:
+   - Modify read/write operations for multi-byte lines
+   - Update set index and tag calculations
+   - Implement partial line fills and evictions
+   - Add line buffering for writes
+   - Handle data alignment within cache lines
+
+2. Memory System:
+   - Update memory access patterns
+   - Add address alignment checks
+   - Implement burst transfers for line fills
+
+3. ISA Implementation:
+   - Modify LOAD/STORE operations
+   - Handle data spanning multiple cache lines
+   - Add alignment-aware memory access
+
+4. Testing Framework:
+   - Update test cases for new address alignment
+   - Modify cache hit/miss pattern tests
+   - Add tests for multi-byte operations
+   - Update set index calculations in tests
+
+5. GUI Updates:
+   - Enhance cache block visualization
+   - Show multiple values per cache line
+   - Update set index display
+   - Add line offset visualization
+
+### Benefits
+- More realistic simulation of modern cache behavior
+- Better demonstration of spatial locality
+- More accurate performance modeling
+- Closer alignment with real hardware designs
+
+### Considerations
+- Increased complexity in implementation
+- More complex debugging and testing
+- Need for careful handling of Python variables
+- Additional educational overhead in explaining line size concepts
+
+### Implementation Priority
+Medium - This would be a significant architectural change that would improve realism but requires extensive modifications across the codebase.

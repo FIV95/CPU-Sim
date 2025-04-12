@@ -37,10 +37,36 @@ class SimulatorGUI(QMainWindow):
         # Create memory hierarchy with correct sizes
         print("Setting up memory hierarchy...")
         self.main_memory = MainMemory("MainMemory", 1024)  # 1KB memory
-        self.l2_cache = Cache("L2Cache", 256, 1, 4, 30, "write-back", self.main_memory, self.logger)  # 256 bytes
-        self.l1_cache = Cache("L1Cache", 64, 1, 2, 10, "write-through", self.l2_cache, self.logger)   # 64 bytes
 
-        # Create ISA with memory and cache
+        # Create L2 cache (slower, larger)
+        self.l2_cache = Cache(
+            name="L2Cache",
+            size=256,        # 256 bytes total size
+            line_size=8,     # 8 bytes per line (more realistic)
+            associativity=4, # 4-way set associative
+            access_time=30,  # 30ns access time
+            write_policy="write-back",
+            next_level=self.main_memory,
+            logger=self.logger
+        )
+
+        # Create L1 cache (faster, smaller)
+        self.l1_cache = Cache(
+            name="L1Cache",
+            size=64,         # 64 bytes total size
+            line_size=4,     # 4 bytes per line (more realistic)
+            associativity=2, # 2-way set associative
+            access_time=10,  # 10ns access time
+            write_policy="write-through",
+            next_level=self.l2_cache,
+            logger=self.logger
+        )
+
+        # Explicitly connect the cache hierarchy
+        self.l1_cache.set_next_level(self.l2_cache)
+        self.l2_cache.set_next_level(self.main_memory)
+
+        # Create ISA with L1 cache as its memory interface
         self.isa = SimpleISA(memory=self.main_memory, cache=self.l1_cache)
 
         # Setup UI
@@ -91,10 +117,36 @@ class SimulatorGUI(QMainWindow):
         layout = QVBoxLayout(frame)
         layout.setSpacing(4)
 
+        # Create toggle button
+        toggle_button = QPushButton("Show System Information")
+        toggle_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2b2b2b;
+                color: #00ff00;
+                border: 1px solid #00ff00;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-size: 12pt;
+                min-width: 200px;
+            }
+            QPushButton:hover {
+                background-color: #3b3b3b;
+            }
+            QPushButton:pressed {
+                background-color: #1b1b1b;
+            }
+        """)
+        layout.addWidget(toggle_button)
+
+        # Create container widget for system info
+        self.system_info_container = QWidget()
+        container_layout = QVBoxLayout(self.system_info_container)
+        container_layout.setSpacing(4)
+
         # System Configuration title
         title = QLabel("System Configuration")
         title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        layout.addWidget(title)
+        container_layout.addWidget(title)
 
         # Create grid for system info
         grid = QGridLayout()
@@ -102,8 +154,8 @@ class SimulatorGUI(QMainWindow):
 
         # Cache Configuration
         cache_info = [
-            ("L1 Cache", "64 bytes", "1 byte", "2-way", "10ns", "Write-through"),
-            ("L2 Cache", "256 bytes", "1 byte", "4-way", "30ns", "Write-back"),
+            ("L1 Cache", "64 bytes", "4 bytes", "2-way", "10ns", "Write-through"),
+            ("L2 Cache", "256 bytes", "8 bytes", "4-way", "30ns", "Write-back"),
             ("Main Memory", "1024 bytes", "N/A", "N/A", "100ns", "N/A")
         ]
 
@@ -124,16 +176,26 @@ class SimulatorGUI(QMainWindow):
             grid.addWidget(QLabel(time), row, 4)
             grid.addWidget(QLabel(policy), row, 5)
 
-        layout.addLayout(grid)
+        container_layout.addLayout(grid)
 
         # Register Configuration
         reg_title = QLabel("Register Configuration")
         reg_title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         reg_title.setStyleSheet("margin-top: 10px;")
-        layout.addWidget(reg_title)
+        container_layout.addWidget(reg_title)
 
         reg_grid = QGridLayout()
         reg_grid.setSpacing(8)
+
+        # Register info
+        reg_info = [
+            ("eax", "General Purpose Register"),
+            ("ebx", "General Purpose Register"),
+            ("ecx", "General Purpose Register"),
+            ("edx", "General Purpose Register"),
+            ("esi", "Source Index Register"),
+            ("edi", "Destination Index Register")
+        ]
 
         # Register headers
         reg_headers = ["Register", "Purpose"]
@@ -144,21 +206,29 @@ class SimulatorGUI(QMainWindow):
             reg_grid.addWidget(label, 0, col)
 
         # Register data
-        registers = [
-            ("eax", "General Purpose"),
-            ("ebx", "General Purpose"),
-            ("ecx", "General Purpose"),
-            ("edx", "General Purpose"),
-            ("esi", "Source Index"),
-            ("edi", "Destination Index")
-        ]
-
-        for row, (reg, purpose) in enumerate(registers, 1):
+        for row, (reg, purpose) in enumerate(reg_info, 1):
             reg_grid.addWidget(QLabel(reg), row, 0)
             reg_grid.addWidget(QLabel(purpose), row, 1)
 
-        layout.addLayout(reg_grid)
+        container_layout.addLayout(reg_grid)
+
+        # Initially hide the system info
+        self.system_info_container.hide()
+        layout.addWidget(self.system_info_container)
+
+        # Connect toggle button
+        toggle_button.clicked.connect(self.toggle_system_info)
+
         return frame
+
+    def toggle_system_info(self):
+        """Toggle the visibility of system information"""
+        if self.system_info_container.isVisible():
+            self.system_info_container.hide()
+            self.sender().setText("Show System Information")
+        else:
+            self.system_info_container.show()
+            self.sender().setText("Hide System Information")
 
     def create_cpu_section(self):
         frame = QFrame()
@@ -310,8 +380,8 @@ class SimulatorGUI(QMainWindow):
                 block_layout = QHBoxLayout(block)
                 block_layout.setContentsMargins(2, 2, 2, 2)
 
-                value_label = QLabel("0")
-                value_label.setStyleSheet("QLabel { color: #ff69b4; }")
+                value_label = QLabel("Empty")
+                value_label.setStyleSheet("QLabel { color: #666666; }")  # Dim color for empty blocks
                 value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 block_layout.addWidget(value_label)
 
@@ -368,8 +438,8 @@ class SimulatorGUI(QMainWindow):
                 block_layout = QHBoxLayout(block)
                 block_layout.setContentsMargins(2, 2, 2, 2)
 
-                value_label = QLabel("0")
-                value_label.setStyleSheet("QLabel { color: #9370db; }")
+                value_label = QLabel("Empty")
+                value_label.setStyleSheet("QLabel { color: #666666; }")  # Dim color for empty blocks
                 value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 block_layout.addWidget(value_label)
 
@@ -502,6 +572,9 @@ class SimulatorGUI(QMainWindow):
             self.pc_label.setText(f"Program Counter: 0x{self.current_instruction:02x}")
             self.status_label.setText("Status: Executing...")
 
+            # Force GUI update
+            QApplication.processEvents()
+
             # Load and execute instruction
             try:
                 # First load the program if we haven't already
@@ -526,11 +599,15 @@ class SimulatorGUI(QMainWindow):
 
             self.current_instruction += 1
             self.update_display()
+
+            # Force another GUI update after state changes
+            QApplication.processEvents()
         else:
             self.timer.stop()
             self.is_running = False
             self.run_button.setText("Run")
             self.status_label.setText("Status: Program Complete")
+            QApplication.processEvents()
 
     def toggle_run(self):
         """Toggle between run and pause states"""
@@ -566,27 +643,49 @@ class SimulatorGUI(QMainWindow):
             value = self.isa.registers.get(reg_name, 0)
             self.register_labels[reg_name].setText(f"{value}")
 
-        # Update L1 Cache blocks
+        # Get cache states
         l1_info = self.l1_cache.get_cache_state()
-        if l1_info:
-            for set_idx in range(32):  # 64 bytes / 1 byte per line / 2-way = 32 sets
-                for block_idx in range(2):
-                    block_key = f"{set_idx}_{block_idx}"
+        l2_info = self.l2_cache.get_cache_state()
+
+        print("\nDEBUG: Cache States")
+        print(f"L1 Cache: {l1_info}")
+        print(f"L2 Cache: {l2_info}")
+
+        # Update L1 Cache blocks
+        for set_idx in range(32):
+            for block_idx in range(2):
+                block_key = f"{set_idx}_{block_idx}"
+                if block_key in self.l1_blocks:
                     value_label = self.l1_blocks[block_key]
-                    # Get the value from the cache state
-                    value = l1_info.get((set_idx, block_idx), 0)
-                    value_label.setText(f"{value}")
+                    if (set_idx, block_idx) in l1_info:
+                        value = l1_info[(set_idx, block_idx)]
+                        display_text = f"T:0 V:{value}"
+                        value_label.setText(display_text)
+                        value_label.setStyleSheet("QLabel { background-color: #1e1e1e; color: #ff69b4; font-weight: bold; }")
+                        print(f"DEBUG: Updating L1 block {block_key} with {display_text}")
+                    else:
+                        value_label.setText("Empty")
+                        value_label.setStyleSheet("QLabel { background-color: #1e1e1e; color: #666666; }")
+                        print(f"DEBUG: Setting L1 block {block_key} to Empty")
+                    value_label.update()
 
         # Update L2 Cache blocks
-        l2_info = self.l2_cache.get_cache_state()
-        if l2_info:
-            for set_idx in range(64):  # 256 bytes / 1 byte per line / 4-way = 64 sets
-                for block_idx in range(4):
-                    block_key = f"{set_idx}_{block_idx}"
+        for set_idx in range(64):
+            for block_idx in range(4):
+                block_key = f"{set_idx}_{block_idx}"
+                if block_key in self.l2_blocks:
                     value_label = self.l2_blocks[block_key]
-                    # Get the value from the cache state
-                    value = l2_info.get((set_idx, block_idx), 0)
-                    value_label.setText(f"{value}")
+                    if (set_idx, block_idx) in l2_info:
+                        value = l2_info[(set_idx, block_idx)]
+                        display_text = f"T:0 V:{value}"
+                        value_label.setText(display_text)
+                        value_label.setStyleSheet("QLabel { background-color: #1e1e1e; color: #9370db; font-weight: bold; }")
+                        print(f"DEBUG: Updating L2 block {block_key} with {display_text}")
+                    else:
+                        value_label.setText("Empty")
+                        value_label.setStyleSheet("QLabel { background-color: #1e1e1e; color: #666666; }")
+                        print(f"DEBUG: Setting L2 block {block_key} to Empty")
+                    value_label.update()
 
         # Update cache statistics
         l1_stats = self.l1_cache.get_performance_stats()
@@ -603,6 +702,10 @@ class SimulatorGUI(QMainWindow):
             f"Misses: {l2_stats['misses']}, "
             f"Hit Rate: {l2_stats['hit_rate']:.2f}%"
         )
+
+        # Force immediate update of the entire window
+        self.repaint()
+        QApplication.processEvents()
 
 def main():
     print("Starting main application...")

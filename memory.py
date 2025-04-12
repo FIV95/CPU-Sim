@@ -238,6 +238,16 @@ class MainMemory(Memory):
         super().__init__(name, size)
         self._memory_map = {}  # Track memory mapping
         self._access_patterns = []  # Track access patterns
+        self._access_pattern = {
+            "sequential": 0,
+            "repeated": 0,
+            "random": 0,
+            "last_address": None
+        }  # Current access pattern tracking
+        # Initialize latency tracking
+        self._min_latency = float('inf')
+        self._max_latency = 0
+        self._total_latency = 0
 
     def get_performance_stats(self):
         """Return performance statistics about the main memory"""

@@ -59,6 +59,11 @@ class Cache:
         """Read data from cache"""
         start_time = time()
 
+        # Debug log for every read attempt
+        self._logger.log(LogLevel.DEBUG, f"\n=== Cache Read Operation ===")
+        self._logger.log(LogLevel.DEBUG, f"Address: {address}")
+        self._logger.log(LogLevel.DEBUG, f"Current Stats - Hits: {self._stats['hits']}, Misses: {self._stats['misses']}")
+
         # Track data flow
         self._data_flow.append({
             'operation': 'read',
@@ -70,6 +75,9 @@ class Cache:
         set_index = (address // self._line_size) % self._sets
         tag = address // (self._line_size * self._sets)
 
+        self._logger.log(LogLevel.DEBUG, f"Set Index: {set_index}, Tag: {tag}")
+        self._logger.log(LogLevel.DEBUG, f"Current Set Contents: {self._entries[set_index]}")
+
         # Check for hit
         for entry in self._entries[set_index]:
             if entry["tag"] == tag and entry["valid"]:
@@ -77,6 +85,8 @@ class Cache:
                 self._stats['hits'] += 1
                 self._stats['reads'] += 1
                 value = int(entry["data"])
+
+                self._logger.log(LogLevel.DEBUG, f"Cache HIT - Value: {value}")
 
                 # Log the hit with enhanced visualization
                 if output:
@@ -166,6 +176,11 @@ class Cache:
         """Write data to cache"""
         start_time = time()
 
+        # Debug log for every write attempt
+        self._logger.log(LogLevel.DEBUG, f"\n=== Cache Write Operation ===")
+        self._logger.log(LogLevel.DEBUG, f"Address: {address}, Data: {data}")
+        self._logger.log(LogLevel.DEBUG, f"Current Stats - Hits: {self._stats['hits']}, Misses: {self._stats['misses']}")
+
         # Ensure data is integer
         data = int(data)
 
@@ -180,6 +195,9 @@ class Cache:
         # Calculate set index and tag
         set_index = (address // self._line_size) % self._sets
         tag = address // (self._line_size * self._sets)
+
+        self._logger.log(LogLevel.DEBUG, f"Set Index: {set_index}, Tag: {tag}")
+        self._logger.log(LogLevel.DEBUG, f"Current Set Contents: {self._entries[set_index]}")
 
         # Always write to next level first for write-through
         if self._next_level:
