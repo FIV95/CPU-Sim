@@ -4,7 +4,7 @@
 ;   - Register operations (MOV)
 ;   - Memory operations (LOAD)
 ;   - Arithmetic (ADD, SUB, INC, DEC)
-;   - Logical (NOT)
+;   - Logical (NOT, AND)
 ;   - Control flow (JMP, JZ, JNZ)
 ;   - Cache behavior
 ;
@@ -13,9 +13,9 @@
 ;     * eax = 0 (counted down from 10)
 ;     * ebx = 6 (incremented then decremented)
 ;     * ecx = 12 (loop counter)
-;     * edx = 42 (from memory)
+;     * edx = 42 (from memory, then AND operations)
 ;     * esi = 123 (from memory)
-;     * edi = 255 (from memory)
+;     * edi = 15 (after AND operations)
 ;   - Cache performance:
 ;     * Should show hits for repeated memory access
 ;     * Should demonstrate L1/L2 interaction
@@ -47,6 +47,12 @@ DEC ebx        ; ebx = 6
 
 ; Test NOT instruction
 NOT ecx        ; ecx = -1 (all bits inverted)
+
+; Test AND instructions
+MOV edi #31    ; edi = 31 (0b11111)
+AND edi #15    ; edi = 15 (0b01111)
+MOV edx #60    ; edx = 60 (0b111100)
+AND edx edi    ; edx = 12 (0b001100)
 
 ; Loop to demonstrate jumps
 loop_start:

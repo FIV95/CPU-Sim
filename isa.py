@@ -23,6 +23,7 @@ class InstructionType(Enum):
     INC = auto()    # Increment value
     DEC = auto()    # Decrement value
     NOT = auto()    # Bitwise NOT
+    AND = auto()    # Bitwise AND
     JMP = auto()    # Unconditional jump
     JZ = auto()     # Jump if zero
     JNZ = auto()    # Jump if not zero
@@ -139,6 +140,8 @@ class SimpleISA:
                 self._execute_dec(instruction.operands)
             elif instruction.type == InstructionType.NOT:
                 self._execute_not(instruction.operands)
+            elif instruction.type == InstructionType.AND:
+                self._execute_and(instruction.operands)
             elif instruction.type == InstructionType.JMP:
                 next_pc = self._execute_jmp(instruction.operands)
             elif instruction.type == InstructionType.JZ:
@@ -290,6 +293,35 @@ class SimpleISA:
         self.logger.log_register_operation('not', {
             'register': reg,
             'result': self.registers[reg]
+        })
+
+    def _execute_and(self, operands: List[str]) -> None:
+        """Execute AND instruction"""
+        if len(operands) != 2:
+            raise ValueError("AND requires 2 operands")
+
+        dest, src = operands
+        if dest not in self.registers:
+            raise ValueError(f"Invalid destination register: {dest}")
+
+        # Get source value
+        if src.startswith('#'):
+            value = int(src[1:])
+        elif src.startswith('['):
+            # Memory access
+            addr = self._evaluate_address(src[1:-1])
+            value = self.cache.read(addr) if self.cache else self.memory.read(addr)
+        else:
+            value = self.registers.get(src, 0)
+
+        # Perform bitwise AND operation
+        self.registers[dest] &= value
+
+        # Log register operation with enhanced visualization
+        self.logger.log_register_operation('and', {
+            'dest': dest,
+            'value': value,
+            'result': self.registers[dest]
         })
 
     def _execute_jmp(self, operands: List[str]) -> int:
