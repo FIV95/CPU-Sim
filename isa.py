@@ -20,6 +20,8 @@ class InstructionType(Enum):
     MOV = auto()    # Move data
     ADD = auto()    # Add values
     SUB = auto()    # Subtract values
+    INC = auto()    # Increment value
+    DEC = auto()    # Decrement value
     JMP = auto()    # Unconditional jump
     JZ = auto()     # Jump if zero
     JNZ = auto()    # Jump if not zero
@@ -130,6 +132,10 @@ class SimpleISA:
                 self._execute_add(instruction.operands)
             elif instruction.type == InstructionType.SUB:
                 self._execute_sub(instruction.operands)
+            elif instruction.type == InstructionType.INC:
+                self._execute_inc(instruction.operands)
+            elif instruction.type == InstructionType.DEC:
+                self._execute_dec(instruction.operands)
             elif instruction.type == InstructionType.JMP:
                 next_pc = self._execute_jmp(instruction.operands)
             elif instruction.type == InstructionType.JZ:
@@ -232,6 +238,38 @@ class SimpleISA:
 
         # Subtract from destination
         self.registers[dest] -= value
+
+    def _execute_inc(self, operands: List[str]) -> None:
+        """Execute INC instruction - increment register by 1"""
+        if len(operands) != 1:
+            raise ValueError(f"INC instruction requires 1 operand, got {len(operands)}")
+
+        dest = operands[0]
+        if dest not in self.registers:
+            raise ValueError(f"Invalid register {dest}")
+
+        self.registers[dest] += 1
+        self.logger.log_register_operation('inc', {
+            'dest': dest,
+            'value': self.registers[dest],
+            'source': 'increment'
+        })
+
+    def _execute_dec(self, operands: List[str]) -> None:
+        """Execute DEC instruction - decrement register by 1"""
+        if len(operands) != 1:
+            raise ValueError(f"DEC instruction requires 1 operand, got {len(operands)}")
+
+        dest = operands[0]
+        if dest not in self.registers:
+            raise ValueError(f"Invalid register {dest}")
+
+        self.registers[dest] -= 1
+        self.logger.log_register_operation('dec', {
+            'dest': dest,
+            'value': self.registers[dest],
+            'source': 'decrement'
+        })
 
     def _execute_jmp(self, operands: List[str]) -> int:
         """Execute JMP instruction"""

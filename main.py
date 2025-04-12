@@ -6,9 +6,12 @@ from isa import SimpleISA
 from utils.logger import Logger, LogLevel
 
 def main():
+    # Get test file from command line or use default
+    test_file = sys.argv[1] if len(sys.argv) > 1 else 'tests/test_program.txt'
+
     # Initialize logger
     logger = Logger()
-    logger.log(LogLevel.INFO, "Starting simplified ISA simulator")
+    logger.log(LogLevel.INFO, f"Starting simplified ISA simulator with test file: {test_file}")
 
     # Initialize memory hierarchy
     main_memory = Memory(name="MainMemory", size=1024)  # 1KB memory
@@ -42,7 +45,7 @@ def main():
 
     # Load test program
     try:
-        with open('test_program.txt', 'r') as f:
+        with open(test_file, 'r') as f:
             program = f.readlines()
         isa.load_program(program)
         logger.log(LogLevel.INFO, "Program loaded successfully")
@@ -62,13 +65,13 @@ def main():
         logger.log(LogLevel.INFO, f"  Misses: {l1_stats['misses']}")
         logger.log(LogLevel.INFO, f"  Hit Rate: {l1_stats['hit_rate']:.2f}%")
 
-    # Print final memory state
+        # Print final memory state
     logger.log(LogLevel.INFO, "\n=== Final Memory State ===")
     for addr in [100, 104, 108, 112]:
         value = main_memory.read(addr)
         logger.log(LogLevel.INFO, f"Memory[{addr}]: {value}")
 
-    # Print cache statistics
+        # Print cache statistics
     logger.log(LogLevel.INFO, "\n=== Cache Statistics ===")
     if l1_cache:
         l1_stats = l1_cache.get_performance_stats()
@@ -76,7 +79,7 @@ def main():
         logger.log(LogLevel.INFO, f"  Hits: {l1_stats['hits']}")
         logger.log(LogLevel.INFO, f"  Misses: {l1_stats['misses']}")
         logger.log(LogLevel.INFO, f"  Hit Rate: {l1_stats['hit_rate']:.2f}%")
-        logger.log(LogLevel.INFO, f"  Access Time: {l1_stats['access_time']}ns")
+        logger.log(LogLevel.INFO, f"  Access Time: {l1_cache._access_time}ns")
 
     if l2_cache:
         l2_stats = l2_cache.get_performance_stats()
@@ -84,7 +87,7 @@ def main():
         logger.log(LogLevel.INFO, f"  Hits: {l2_stats['hits']}")
         logger.log(LogLevel.INFO, f"  Misses: {l2_stats['misses']}")
         logger.log(LogLevel.INFO, f"  Hit Rate: {l2_stats['hit_rate']:.2f}%")
-        logger.log(LogLevel.INFO, f"  Access Time: {l2_stats['access_time']}ns")
+        logger.log(LogLevel.INFO, f"  Access Time: {l2_cache._access_time}ns")
 
     logger.log(LogLevel.INFO, "\nMain Memory (Slowest):")
     logger.log(LogLevel.INFO, f"  Access Time: {main_memory._access_time}ns")

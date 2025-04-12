@@ -1,4 +1,25 @@
-; Comprehensive test program demonstrating all ISA features
+;===============================================
+; Test Name: Comprehensive ISA Feature Test
+; Description: Tests all major ISA features including:
+;   - Register operations (MOV)
+;   - Memory operations (LOAD)
+;   - Arithmetic (ADD, SUB, INC, DEC)
+;   - Control flow (JMP, JZ, JNZ)
+;   - Cache behavior
+;
+; Expected Results:
+;   - Final register values:
+;     * eax = 0 (counted down from 10)
+;     * ebx = 6 (incremented then decremented)
+;     * ecx = 12 (loop counter)
+;     * edx = 42 (from memory)
+;     * esi = 123 (from memory)
+;     * edi = 255 (from memory)
+;   - Cache performance:
+;     * Should show hits for repeated memory access
+;     * Should demonstrate L1/L2 interaction
+;===============================================
+
 ; Initialize registers
 MOV eax #10    ; eax = 10
 MOV ebx #5     ; ebx = 5
@@ -17,6 +38,11 @@ LOAD edi [108] ; edi = 255
 ; Arithmetic operations
 ADD eax ebx    ; eax = eax + ebx (10 + 5 = 15)
 SUB eax #3     ; eax = eax - 3 (15 - 3 = 12)
+
+; Test INC and DEC instructions
+INC ebx        ; ebx = 6
+INC ebx        ; ebx = 7
+DEC ebx        ; ebx = 6
 
 ; Loop to demonstrate jumps
 loop_start:
