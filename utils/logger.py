@@ -144,7 +144,7 @@ class Logger:
 
     # Cache logging methods
     def log_cache_operation(self, cache_name: str, op_type: str, hit: bool, details: Any = None):
-        """Enhanced cache operation logging with data flow visualization"""
+        """Enhanced cache operation logging with cleaner visualization"""
         if not self.should_log(LogLevel.INFO):
             return
 
@@ -152,43 +152,47 @@ class Logger:
         cache_color = self._get_cache_color(cache_name)
         flow_color = self._cache_colors['DataFlow']
 
-        # Build the operation string
-        op_symbol = self._flow_symbols[op_type]
-        hit_symbol = self._flow_symbols['hit'] if hit else self._flow_symbols['miss']
+        # Simplified operation indicators
+        op_indicators = {
+            'read': 'READ ',
+            'write': 'WRITE',
+            'through': 'PROP '
+        }.get(op_type, '????')
 
-        # Format the base message
+        hit_status = "HIT ✓" if hit else "MISS ✗"
+
+        # Format the base message with clear spacing
         message = (
-            f"{flow_color}{op_symbol} {cache_color}{cache_name}{Style.RESET_ALL} "
-            f"{flow_color}{hit_symbol}{Style.RESET_ALL}"
+            f"{cache_color}{cache_name:<3}{Style.RESET_ALL} | "
+            f"{flow_color}{op_indicators} | {hit_status}{Style.RESET_ALL}"
         )
 
         # Add details if provided
-        if details:
-            if isinstance(details, dict):
-                for key, value in details.items():
-                    message += f" {key}={cache_color}{value}{Style.RESET_ALL}"
-            else:
-                message += f" {cache_color}{details}{Style.RESET_ALL}"
+        if details and isinstance(details, dict):
+            if 'address' in details:
+                message += f" | addr[{details['address']}]"
+            if 'value' in details:
+                message += f" = {details['value']}"
 
-        print(message)
+        print("\n" + message)
 
-        # Add human-readable explanation
-        explanation = ""
-        if op_type == "read":
-            if hit:
-                explanation = f"✨ Found the value in {cache_name} (cache hit)"
-            else:
-                explanation = f"🔍 Value not in {cache_name} (cache miss), need to check next level"
-        elif op_type == "write":
-            if hit:
-                explanation = f"✍️  Updated existing value in {cache_name}"
-            else:
-                explanation = f"📝 Adding new value to {cache_name}"
-        elif op_type == "through":
-            explanation = f"⚡ Propagating value through {cache_name}"
+        # Add cache set visualization with better spacing
+        if details and isinstance(details, dict):
+            if 'set' in details and 'associativity' in details:
+                set_index = details['set']
+                associativity = details['associativity']
+                current_entries = details.get('entries', 0)
 
-        if explanation:
-            print(f"  {explanation}")
+                # Visual representation of cache set
+                print(f"  Cache Set {set_index}:")
+                blocks = "█" * current_entries + "░" * (associativity - current_entries)
+                print(f"  {blocks} ({current_entries}/{associativity} entries used)")
+
+                # Only show capacity info if relevant
+                if current_entries >= associativity:
+                    print("  → Set full, will use LRU policy for next write")
+                    if details.get('dirty', False):
+                        print("  → Dirty data will be written back")
 
         # Track cache transitions
         self._track_cache_transition(cache_name, op_type, hit)
