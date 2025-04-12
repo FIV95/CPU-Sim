@@ -37,12 +37,15 @@ class Cache:
         self._logger = logger if logger else Logger()
         self._sets = size // (line_size * associativity)
         self._entries = [[] for _ in range(self._sets)]
-        self._access_count = 0
-        self._hit_count = 0
-        self._miss_count = 0
-        self._total_access_time = 0
-        self._min_access_time = float('inf')
-        self._max_access_time = 0
+        self._stats = {
+            'hits': 0,
+            'misses': 0,
+            'reads': 0,
+            'writes': 0,
+            'total_access_time': 0,
+            'min_access_time': float('inf'),
+            'max_access_time': 0
+        }
         self._exec_time = 0
         self._data_flow = []
         self._last_access_time = 0
@@ -64,20 +67,33 @@ class Cache:
         })
 
         # Calculate set index and tag
-        set_index = ((address // self._object_size) // (self._line_size // self._object_size)) % self._sets
+        set_index = (address // self._line_size) % self._sets
         tag = address // (self._line_size * self._sets)
-
-        # Log operation start
-        if output:
-            self._logger.log(LogLevel.DEBUG, f"Cache read: address={address}, set={set_index}, tag={tag}")
 
         # Check for hit
         for entry in self._entries[set_index]:
             if entry["tag"] == tag and entry["valid"]:
                 # Cache hit
-                self._hit_count += 1
+                self._stats['hits'] += 1
+                self._stats['reads'] += 1
+                value = int(entry["data"])
+
+                # Log the hit with enhanced visualization
                 if output:
-                    self._logger.log(LogLevel.DEBUG, f"Cache hit: found entry with tag {tag}")
+                    self._logger.log_cache_operation(
+                        self._name,
+                        'read',
+                        True,
+                        {
+                            'address': address,
+                            'value': value,
+                            'set': set_index,
+                            'tag': tag,
+                            'associativity': self._associativity,
+                            'entries': len(self._entries[set_index]),
+                            'dirty': entry["dirty"]
+                        }
+                    )
 
                 # Update LRU order
                 self._update_lru(set_index, entry)
@@ -87,58 +103,64 @@ class Cache:
                 self._exec_time += access_time
                 self._update_stats(access_time)
 
-                if output:
-                    self._log_stats()
-
-                # Ensure data is returned as integer
-                return int(entry["data"])
+                return value
 
         # Cache miss
-        self._miss_count += 1
-        if output:
-            self._logger.log(LogLevel.DEBUG, f"Cache miss: no valid entry with tag {tag}")
+        self._stats['misses'] += 1
+        self._stats['reads'] += 1
 
-        # Get data from next level
+        # Get value from next level
         if self._next_level:
-            data = self._next_level.read(address)
-            if data is not None:
-                # Create new entry
-                new_entry = {
-                    "tag": tag,
-                    "data": int(data),  # Ensure data is stored as integer
-                    "valid": True,
-                    "dirty": False,
-                    "lru": 0
-                }
+            value = self._next_level.read(address)
 
-                # Handle set full condition
-                if len(self._entries[set_index]) >= self._associativity:
-                    # Find LRU entry to replace
-                    lru_entry = min(self._entries[set_index], key=lambda x: x["lru"])
-                    if lru_entry["dirty"] and self._write_policy == "write-back":
-                        # Write back dirty data
-                        if output:
-                            self._logger.log(LogLevel.DEBUG, f"Writing back dirty data for tag {lru_entry['tag']}")
-                        # Calculate old address from tag and set index
-                        old_address = lru_entry["tag"] * (self._line_size * self._sets) + (set_index * self._line_size)
-                        self._next_level.write(old_address, lru_entry["data"])  # Write back old data at old address
-                    self._entries[set_index].remove(lru_entry)
+            # Log the miss with enhanced visualization
+            if output:
+                self._logger.log_cache_operation(
+                    self._name,
+                    'read',
+                    False,
+                    {
+                        'address': address,
+                        'value': value,
+                        'set': set_index,
+                        'tag': tag,
+                        'associativity': self._associativity,
+                        'entries': len(self._entries[set_index]),
+                        'eviction_needed': len(self._entries[set_index]) >= self._associativity
+                    }
+                )
 
-                # Add new entry
-                self._entries[set_index].append(new_entry)
-                self._update_lru(set_index, new_entry)
+            # Create new entry
+            new_entry = {
+                "tag": tag,
+                "data": value,
+                "valid": True,
+                "dirty": False,
+                "lru": 0
+            }
 
-                # Calculate access time and update statistics
-                access_time = time() - start_time
-                self._exec_time += access_time
-                self._update_stats(access_time)
+            # Handle set full condition
+            if len(self._entries[set_index]) >= self._associativity:
+                # Find LRU entry to replace
+                lru_entry = min(self._entries[set_index], key=lambda x: x["lru"])
+                if lru_entry["dirty"] and self._write_policy == "write-back":
+                    # Write back dirty data
+                    old_address = lru_entry["tag"] * (self._line_size * self._sets) + (set_index * self._line_size)
+                    self._next_level.write(old_address, lru_entry["data"])
+                self._entries[set_index].remove(lru_entry)
 
-                if output:
-                    self._log_stats()
+            # Add new entry
+            self._entries[set_index].append(new_entry)
+            self._update_lru(set_index, new_entry)
 
-                return int(data)  # Ensure data is returned as integer
+            # Calculate access time and update statistics
+            access_time = time() - start_time
+            self._exec_time += access_time
+            self._update_stats(access_time)
 
-        return None
+            return value
+        else:
+            raise ValueError("No next level cache/memory available")
 
     def write(self, address, data, output=True):
         """Write data to cache"""
@@ -156,48 +178,88 @@ class Cache:
         })
 
         # Calculate set index and tag
-        set_index = ((address // self._object_size) // (self._line_size // self._object_size)) % self._sets
+        set_index = (address // self._line_size) % self._sets
         tag = address // (self._line_size * self._sets)
 
-        # Log operation start
-        if output:
-            self._logger.log(LogLevel.DEBUG, f"Cache write: address={address}, data={data}, set={set_index}, tag={tag}")
+        # Always write to next level first for write-through
+        if self._next_level:
+            self._next_level.write(address, data)
+
+            # Log the write-through with enhanced visualization
+            if output:
+                self._logger.log_cache_operation(
+                    self._name,
+                    'through',
+                    True,
+                    {
+                        'address': address,
+                        'value': data,
+                        'set': set_index,
+                        'tag': tag,
+                        'associativity': self._associativity,
+                        'entries': len(self._entries[set_index]),
+                        'write_policy': self._write_policy
+                    }
+                )
 
         # Check for hit
         for entry in self._entries[set_index]:
             if entry["tag"] == tag and entry["valid"]:
                 # Cache hit
-                self._hit_count += 1
+                self._stats['hits'] += 1
+                self._stats['writes'] += 1
+
+                # Log the hit with enhanced visualization
                 if output:
-                    self._logger.log(LogLevel.DEBUG, f"Cache hit: updating entry with tag {tag}")
+                    self._logger.log_cache_operation(
+                        self._name,
+                        'write',
+                        True,
+                        {
+                            'address': address,
+                            'value': data,
+                            'set': set_index,
+                            'tag': tag,
+                            'associativity': self._associativity,
+                            'entries': len(self._entries[set_index]),
+                            'dirty': entry["dirty"]
+                        }
+                    )
 
                 # Update data and mark as dirty
                 entry["data"] = data
-                entry["dirty"] = True
+                entry["dirty"] = True if self._write_policy == "write-back" else False
 
                 # Update LRU order
                 self._update_lru(set_index, entry)
-
-                # Handle write-through policy
-                if self._write_policy == "write-through" and self._next_level:
-                    if output:
-                        self._logger.log(LogLevel.DEBUG, "Write-through: writing to next level")
-                    self._next_level.write(address, data)
 
                 # Calculate access time and update statistics
                 access_time = time() - start_time
                 self._exec_time += access_time
                 self._update_stats(access_time)
 
-                if output:
-                    self._log_stats()
-
                 return True
 
         # Cache miss
-        self._miss_count += 1
+        self._stats['misses'] += 1
+        self._stats['writes'] += 1
+
+        # Log the miss with enhanced visualization
         if output:
-            self._logger.log(LogLevel.DEBUG, f"Cache miss: no valid entry with tag {tag}")
+            self._logger.log_cache_operation(
+                self._name,
+                'write',
+                False,
+                {
+                    'address': address,
+                    'value': data,
+                    'set': set_index,
+                    'tag': tag,
+                    'associativity': self._associativity,
+                    'entries': len(self._entries[set_index]),
+                    'eviction_needed': len(self._entries[set_index]) >= self._associativity
+                }
+            )
 
         # Create new entry
         new_entry = {
@@ -214,30 +276,18 @@ class Cache:
             lru_entry = min(self._entries[set_index], key=lambda x: x["lru"])
             if lru_entry["dirty"] and self._write_policy == "write-back":
                 # Write back dirty data
-                if output:
-                    self._logger.log(LogLevel.DEBUG, f"Writing back dirty data for tag {lru_entry['tag']}")
-                # Calculate old address from tag and set index
                 old_address = lru_entry["tag"] * (self._line_size * self._sets) + (set_index * self._line_size)
-                self._next_level.write(old_address, lru_entry["data"])  # Write back old data at old address
+                self._next_level.write(old_address, lru_entry["data"])
             self._entries[set_index].remove(lru_entry)
 
         # Add new entry
         self._entries[set_index].append(new_entry)
         self._update_lru(set_index, new_entry)
 
-        # Handle write-through policy
-        if self._write_policy == "write-through" and self._next_level:
-            if output:
-                self._logger.log(LogLevel.DEBUG, "Write-through: writing to next level")
-            self._next_level.write(address, data)
-
         # Calculate access time and update statistics
         access_time = time() - start_time
         self._exec_time += access_time
         self._update_stats(access_time)
-
-        if output:
-            self._log_stats()
 
         return True
 
@@ -253,31 +303,39 @@ class Cache:
 
     def _update_stats(self, access_time):
         """Update cache statistics"""
-        self._access_count += 1
-        self._total_access_time += access_time
-        self._min_access_time = min(self._min_access_time, access_time)
-        self._max_access_time = max(self._max_access_time, access_time)
+        self._stats['total_access_time'] += access_time
+        self._stats['min_access_time'] = min(self._stats['min_access_time'], access_time)
+        self._stats['max_access_time'] = max(self._stats['max_access_time'], access_time)
         self._last_access_time = access_time
 
     def _log_stats(self):
         """Log cache statistics"""
-        self._logger.log(LogLevel.DEBUG, f"Cache stats: hits={self._hit_count}, misses={self._miss_count}, "
-                        f"hit_rate={self._hit_count/self._access_count if self._access_count > 0 else 0:.2%}")
+        self._logger.log(LogLevel.DEBUG, f"Cache stats: hits={self._stats['hits']}, misses={self._stats['misses']}, "
+                        f"hit_rate={self._stats['hits']/self._stats['reads'] if self._stats['reads'] > 0 else 0:.2%}")
 
     def get_performance_stats(self):
         """Get cache performance statistics"""
-        return {
-            "access_count": self._access_count,
-            "hit_count": self._hit_count,
-            "miss_count": self._miss_count,
-            "hit_rate": self._hit_count / self._access_count if self._access_count > 0 else 0,
-            "miss_rate": self._miss_count / self._access_count if self._access_count > 0 else 0,
-            "total_access_time": self._total_access_time,
-            "min_access_time": self._min_access_time,
-            "max_access_time": self._max_access_time,
-            "avg_access_time": self._total_access_time / self._access_count if self._access_count > 0 else 0,
-            "exec_time": self._exec_time
-        }
+        try:
+            hits = self._stats.get('hits', 0)
+            misses = self._stats.get('misses', 0)
+            total_accesses = hits + misses
+            hit_rate = (hits / total_accesses * 100) if total_accesses > 0 else 0.0
+            return {
+                'hits': hits,
+                'misses': misses,
+                'hit_rate': hit_rate,
+                'access_time': self._access_time,
+                'total_accesses': total_accesses
+            }
+        except Exception as e:
+            DEBUG.log(f"Error getting cache stats: {str(e)}")
+            return {
+                'hits': 0,
+                'misses': 0,
+                'hit_rate': 0.0,
+                'access_time': self._access_time,
+                'total_accesses': 0
+            }
 
     def debug_info(self):
         """Get debug information about cache state"""
@@ -307,10 +365,9 @@ class Cache:
 
         perf_stats = info['performance_stats']
         self._logger.log(LogLevel.DEBUG, "\nPerformance Statistics:")
-        self._logger.log(LogLevel.DEBUG, f"  Access Count: {perf_stats['access_count']}")
+        self._logger.log(LogLevel.DEBUG, f"  Access Count: {total_accesses}")
         self._logger.log(LogLevel.DEBUG, f"  Hit Rate: {perf_stats['hit_rate']:.2%}")
-        self._logger.log(LogLevel.DEBUG, f"  Miss Rate: {perf_stats['miss_rate']:.2%}")
-        self._logger.log(LogLevel.DEBUG, f"  Execution Time: {perf_stats['exec_time']:.6f}s")
+        self._logger.log(LogLevel.DEBUG, f"  Execution Time: {self._exec_time:.6f}s")
 
     def get_exec_time(self):
         """Get total execution time"""

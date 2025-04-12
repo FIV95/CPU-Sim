@@ -45,41 +45,27 @@ class Memory():
         else:
             self._access_time = 100
 
-        # Log operation start
-        if output:
-            self._logger.log(LogLevel.DEBUG, f"\n{'='*50}")
-            self._logger.log(LogLevel.DEBUG, f"MEMORY READ OPERATION: {self._name}")
-            self._logger.log(LogLevel.DEBUG, f"Address: {address}")
-            if self._stack_region[0] <= address <= self._stack_region[1]:
-                self._logger.log(LogLevel.DEBUG, "Stack region access")
-
         # Get value and ensure it's an integer
         value = int(self._data[address])
         access_time = self._access_time
 
         # Update statistics
+        self._access_count += 1
         self._exec_time += access_time
+        self._total_access_time += access_time
+        self._min_access_time = min(self._min_access_time, access_time)
+        self._max_access_time = max(self._max_access_time, access_time)
         self._bytes_transferred += 32  # Python objects are ~32 bytes
-        self._latency_stats["min"] = min(self._latency_stats["min"], access_time)
-        self._latency_stats["max"] = max(self._latency_stats["max"], access_time)
-        self._latency_stats["total"] += access_time
-        self._latency_stats["count"] += 1
         self._reads += 1
 
         # Log operation details
         if output:
             self._logger.log_memory_operation("read", {
                 "address": address,
+                "value": value,
                 "access_time": access_time,
-                "total_exec_time": self._exec_time,
-                "latency_stats": {
-                    "min": self._latency_stats["min"],
-                    "max": self._latency_stats["max"],
-                    "avg": self._latency_stats["total"] / self._latency_stats["count"],
-                    "count": self._latency_stats["count"]
-                }
+                "total_exec_time": self._exec_time
             })
-            self._logger.log(LogLevel.DEBUG, f"{'='*50}\n")
 
         return value
 
@@ -101,43 +87,27 @@ class Memory():
         # Ensure data is an integer
         data = int(data)
 
-        # Log operation start
-        if output:
-            self._logger.log(LogLevel.DEBUG, f"\n{'='*50}")
-            self._logger.log(LogLevel.DEBUG, f"MEMORY WRITE OPERATION: {self._name}")
-            self._logger.log(LogLevel.DEBUG, f"Address: {address}")
-            self._logger.log(LogLevel.DEBUG, f"Data: {data}")
-            if self._stack_region[0] <= address <= self._stack_region[1]:
-                self._logger.log(LogLevel.DEBUG, "Stack region access")
-
         # Write value
         self._data[address] = data
         access_time = self._access_time
 
         # Update statistics
+        self._access_count += 1
         self._exec_time += access_time
+        self._total_access_time += access_time
+        self._min_access_time = min(self._min_access_time, access_time)
+        self._max_access_time = max(self._max_access_time, access_time)
         self._bytes_transferred += 32  # Python objects are ~32 bytes
-        self._latency_stats["min"] = min(self._latency_stats["min"], access_time)
-        self._latency_stats["max"] = max(self._latency_stats["max"], access_time)
-        self._latency_stats["total"] += access_time
-        self._latency_stats["count"] += 1
         self._writes += 1
 
         # Log operation details
         if output:
             self._logger.log_memory_operation("write", {
                 "address": address,
-                "data": data,
+                "value": data,
                 "access_time": access_time,
-                "total_exec_time": self._exec_time,
-                "latency_stats": {
-                    "min": self._latency_stats["min"],
-                    "max": self._latency_stats["max"],
-                    "avg": self._latency_stats["total"] / self._latency_stats["count"],
-                    "count": self._latency_stats["count"]
-                }
+                "total_exec_time": self._exec_time
             })
-            self._logger.log(LogLevel.DEBUG, f"{'='*50}\n")
 
         return True
 
