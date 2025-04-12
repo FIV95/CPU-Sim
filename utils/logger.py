@@ -61,10 +61,22 @@ class Logger:
         self._cache_transitions = []
         self._initialized = True
 
+        # Enhanced color scheme for memory hierarchy
         self._cache_colors = {
-            'L1Cache': Fore.CYAN,
-            'L2Cache': Fore.MAGENTA,
-            'MainMemory': Fore.GREEN
+            'L1Cache': Fore.CYAN,      # Bright cyan for L1
+            'L2Cache': Fore.MAGENTA,   # Magenta for L2
+            'MainMemory': Fore.GREEN,  # Green for main memory
+            'Register': Fore.YELLOW,   # Yellow for registers
+            'DataFlow': Fore.WHITE     # White for data flow indicators
+        }
+
+        # Symbols for data flow
+        self._flow_symbols = {
+            'read': '↓',
+            'write': '↑',
+            'hit': '✓',
+            'miss': '✗',
+            'through': '↕'
         }
 
     @property
@@ -132,33 +144,62 @@ class Logger:
 
     # Cache logging methods
     def log_cache_operation(self, cache_name: str, op_type: str, hit: bool, details: Any = None):
-        """Log cache operations"""
-        if self.should_log(LogLevel.DEBUG):
-            cache_color = self._get_cache_color(cache_name)
-            status = f"{Fore.GREEN}HIT" if hit else f"{Fore.RED}MISS"
-            print(f"{cache_color}[{cache_name}]{Style.RESET_ALL} {op_type}: {status}{Style.RESET_ALL}")
-            if details is not None:
-                if isinstance(details, dict):
-                    for key, value in details.items():
-                        print(f"  {key}: {value}")
-                else:
-                    print(f" - Data: {details}")
+        """Enhanced cache operation logging with data flow visualization"""
+        if not self.should_log(LogLevel.INFO):
+            return
 
-        # Convert non-dict details to dict format
-        details_dict = details if isinstance(details, dict) else {"data": details} if details is not None else None
+        # Get appropriate colors
+        cache_color = self._get_cache_color(cache_name)
+        flow_color = self._cache_colors['DataFlow']
 
-        self._operations.append(
-            Operation(
-                type=op_type,
-                description=f"{cache_name} {op_type}",
-                data={
-                    "cache_name": cache_name,
-                    "hit": hit,
-                    **(details_dict or {})
-                },
-                category="cache"
-            )
+        # Build the operation string
+        op_symbol = self._flow_symbols[op_type]
+        hit_symbol = self._flow_symbols['hit'] if hit else self._flow_symbols['miss']
+
+        # Format the base message
+        message = (
+            f"{flow_color}{op_symbol} {cache_color}{cache_name}{Style.RESET_ALL} "
+            f"{flow_color}{hit_symbol}{Style.RESET_ALL}"
         )
+
+        # Add details if provided
+        if details:
+            if isinstance(details, dict):
+                for key, value in details.items():
+                    message += f" {key}={cache_color}{value}{Style.RESET_ALL}"
+            else:
+                message += f" {cache_color}{details}{Style.RESET_ALL}"
+
+        print(message)
+
+        # Add human-readable explanation
+        explanation = ""
+        if op_type == "read":
+            if hit:
+                explanation = f"✨ Found the value in {cache_name} (cache hit)"
+            else:
+                explanation = f"🔍 Value not in {cache_name} (cache miss), need to check next level"
+        elif op_type == "write":
+            if hit:
+                explanation = f"✍️  Updated existing value in {cache_name}"
+            else:
+                explanation = f"📝 Adding new value to {cache_name}"
+        elif op_type == "through":
+            explanation = f"⚡ Propagating value through {cache_name}"
+
+        if explanation:
+            print(f"  {explanation}")
+
+        # Track cache transitions
+        self._track_cache_transition(cache_name, op_type, hit)
+
+        # Update cache stats
+        self._init_cache_stats(cache_name)
+        if hit:
+            self._cache_stats[cache_name]["read_hits" if op_type == "read" else "write_hits"] += 1
+        else:
+            self._cache_stats[cache_name]["read_misses" if op_type == "read" else "write_misses"] += 1
+        self._cache_stats[cache_name]["reads" if op_type == "read" else "writes"] += 1
 
     def log_cache_stats(self, cache_name: str):
         """Log cache statistics"""
@@ -192,24 +233,82 @@ class Logger:
 
     # ISA logging methods
     def log_register_operation(self, op_type: str, details: Dict[str, Any]):
-        """Log register operations"""
-        if self.should_log(LogLevel.DEBUG):
-            print(f"\n{Fore.MAGENTA}=== Register {op_type} ==={Style.RESET_ALL}")
-            for key, value in details.items():
-                print(f"{key}: {value}")
-        self._operations.append(
-            Operation("register", op_type, details)
+        """Enhanced register operation logging with data flow visualization"""
+        if not self.should_log(LogLevel.INFO):
+            return
+
+        dest = details.get('dest', '')
+        value = details.get('value', 0)
+        source = details.get('source', '')
+
+        # Get appropriate colors
+        reg_color = self._cache_colors['Register']
+        flow_color = self._cache_colors['DataFlow']
+
+        # Build the operation string
+        op_symbol = self._flow_symbols['write'] if op_type in ['mov', 'load'] else '→'
+
+        # Format the message with colors and symbols
+        message = (
+            f"{flow_color}{op_symbol} {reg_color}{dest}{Style.RESET_ALL} = "
+            f"{reg_color}{value}{Style.RESET_ALL} "
+            f"from {reg_color}{source}{Style.RESET_ALL}"
         )
 
+        print(message)
+
     def log_memory_operation(self, op_type: str, details: Dict[str, Any]):
-        """Log memory operations"""
-        if self.should_log(LogLevel.DEBUG):
-            print(f"\n{Fore.BLUE}=== Memory {op_type} ==={Style.RESET_ALL}")
-            for key, value in details.items():
-                print(f"{key}: {value}")
-        self._operations.append(
-            Operation("memory", op_type, details)
+        """Enhanced memory operation logging with data flow visualization"""
+        if not self.should_log(LogLevel.INFO):
+            return
+
+        cache_name = details.get('cache_name', 'MainMemory')
+        address = details.get('address', 0)
+        value = details.get('value', 0)
+        hit = details.get('hit', False)
+
+        # Get appropriate colors
+        cache_color = self._get_cache_color(cache_name)
+        flow_color = self._cache_colors['DataFlow']
+
+        # Build the operation string
+        op_symbol = self._flow_symbols[op_type]
+        hit_symbol = self._flow_symbols['hit'] if hit else self._flow_symbols['miss']
+
+        # Format the message with colors and symbols
+        message = (
+            f"{flow_color}{op_symbol} {cache_color}{cache_name}{Style.RESET_ALL} "
+            f"at address {Fore.WHITE}[{address}]{Style.RESET_ALL} = "
+            f"{cache_color}{value}{Style.RESET_ALL} "
+            f"{flow_color}{hit_symbol}{Style.RESET_ALL}"
         )
+
+        print(message)
+
+        # Add human-readable explanation
+        if op_type == "read":
+            print(f"  📖 Reading value {value} from memory address {address}")
+        elif op_type == "write":
+            print(f"  📝 Writing value {value} to memory address {address}")
+
+        # Add memory hierarchy explanation
+        if cache_name == "MainMemory":
+            print("  💾 This operation goes directly to main memory (slowest, but largest storage)")
+        elif "L2" in cache_name:
+            print("  🔄 Using L2 cache (medium speed, medium size)")
+        elif "L1" in cache_name:
+            print("  ⚡ Using L1 cache (fastest, but smallest)")
+
+        # Track cache transitions
+        self._track_cache_transition(cache_name, op_type, hit)
+
+        # Update cache stats
+        self._init_cache_stats(cache_name)
+        if hit:
+            self._cache_stats[cache_name]["read_hits" if op_type == "read" else "write_hits"] += 1
+        else:
+            self._cache_stats[cache_name]["read_misses" if op_type == "read" else "write_misses"] += 1
+        self._cache_stats[cache_name]["reads" if op_type == "read" else "writes"] += 1
 
     def log_instruction(self, instruction: str, details: Dict[str, Any] = None):
         """Log instruction execution"""
