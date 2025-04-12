@@ -1,3 +1,21 @@
+;===============================================
+; Test Name: Basic ISA Instruction Test
+; Description: Tests if the ISA can handle basic instructions by:
+;   - Using matrix operations as a practical example
+;   - Testing memory operations (MOV, LOAD)
+;   - Verifying instruction execution and program flow
+;
+; Instructions Tested:
+;   - MOV: Tests if the ISA can write values to memory
+;   - LOAD: Tests if the ISA can read values from memory into registers
+;   - HALT: Tests if the ISA can properly terminate program execution
+;
+; Expected Results:
+;   - MOV instructions successfully write values to memory
+;   - LOAD instructions correctly read values into registers
+;   - Program terminates properly with HALT
+;===============================================
+
 ; Matrix multiplication test program
 ; This program performs matrix multiplication using our tested instructions
 

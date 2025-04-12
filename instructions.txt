@@ -1,0 +1,48 @@
+;===============================================
+; ISA Instructions Reference
+; This file documents all instructions currently supported by our ISA
+;===============================================
+
+; Memory Operations
+;------------------
+MOV   ; Move data between registers, memory, and immediate values
+      ; Examples:
+      ;   MOV eax #42     ; eax = 42
+      ;   MOV [100] #42   ; Memory[100] = 42
+      ;   MOV eax ebx     ; eax = ebx
+
+LOAD  ; Load value from memory into register
+      ; Examples:
+      ;   LOAD eax [100]  ; eax = Memory[100]
+
+; Arithmetic Operations
+;---------------------
+ADD   ; Add two values
+      ; Examples:
+      ;   ADD eax ebx     ; eax = eax + ebx
+      ;   ADD eax #42     ; eax = eax + 42
+
+SUB   ; Subtract second value from first
+      ; Examples:
+      ;   SUB eax ebx     ; eax = eax - ebx
+      ;   SUB eax #42     ; eax = eax - 42
+
+; Control Flow
+;------------
+JMP   ; Unconditional jump to label
+      ; Examples:
+      ;   JMP label       ; Jump to label
+
+JZ    ; Jump if zero (if last result was 0)
+      ; Examples:
+      ;   JZ label        ; Jump to label if zero
+
+JNZ   ; Jump if not zero (if last result was not 0)
+      ; Examples:
+      ;   JNZ label       ; Jump to label if not zero
+
+; Program Control
+;---------------
+HALT  ; Stop program execution
+      ; Examples:
+      ;   HALT            ; End program
