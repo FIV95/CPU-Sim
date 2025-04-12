@@ -22,6 +22,7 @@ class InstructionType(Enum):
     SUB = auto()    # Subtract values
     INC = auto()    # Increment value
     DEC = auto()    # Decrement value
+    NOT = auto()    # Bitwise NOT
     JMP = auto()    # Unconditional jump
     JZ = auto()     # Jump if zero
     JNZ = auto()    # Jump if not zero
@@ -136,6 +137,8 @@ class SimpleISA:
                 self._execute_inc(instruction.operands)
             elif instruction.type == InstructionType.DEC:
                 self._execute_dec(instruction.operands)
+            elif instruction.type == InstructionType.NOT:
+                self._execute_not(instruction.operands)
             elif instruction.type == InstructionType.JMP:
                 next_pc = self._execute_jmp(instruction.operands)
             elif instruction.type == InstructionType.JZ:
@@ -269,6 +272,24 @@ class SimpleISA:
             'dest': dest,
             'value': self.registers[dest],
             'source': 'decrement'
+        })
+
+    def _execute_not(self, operands: List[str]) -> None:
+        """Execute NOT instruction"""
+        if len(operands) != 1:
+            raise ValueError("NOT requires 1 operand")
+
+        reg = operands[0]
+        if reg not in self.registers:
+            raise ValueError(f"Invalid register: {reg}")
+
+        # Perform bitwise NOT operation
+        self.registers[reg] = ~self.registers[reg]
+
+        # Log register operation with enhanced visualization
+        self.logger.log_register_operation('not', {
+            'register': reg,
+            'result': self.registers[reg]
         })
 
     def _execute_jmp(self, operands: List[str]) -> int:

@@ -27,6 +27,20 @@ SUB   ; Subtract second value from first
       ;   SUB eax ebx     ; eax = eax - ebx
       ;   SUB eax #42     ; eax = eax - 42
 
+INC   ; Increment register by 1
+      ; Examples:
+      ;   INC eax         ; eax = eax + 1
+
+DEC   ; Decrement register by 1
+      ; Examples:
+      ;   DEC eax         ; eax = eax - 1
+
+; Logical Operations
+;------------------
+NOT   ; Bitwise NOT (invert all bits)
+      ; Examples:
+      ;   NOT eax         ; eax = ~eax (invert all bits)
+
 ; Control Flow
 ;------------
 JMP   ; Unconditional jump to label

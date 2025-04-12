@@ -4,6 +4,7 @@
 ;   - Register operations (MOV)
 ;   - Memory operations (LOAD)
 ;   - Arithmetic (ADD, SUB, INC, DEC)
+;   - Logical (NOT)
 ;   - Control flow (JMP, JZ, JNZ)
 ;   - Cache behavior
 ;
@@ -43,6 +44,9 @@ SUB eax #3     ; eax = eax - 3 (15 - 3 = 12)
 INC ebx        ; ebx = 6
 INC ebx        ; ebx = 7
 DEC ebx        ; ebx = 6
+
+; Test NOT instruction
+NOT ecx        ; ecx = -1 (all bits inverted)
 
 ; Loop to demonstrate jumps
 loop_start:

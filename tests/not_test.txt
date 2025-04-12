@@ -1,0 +1,18 @@
+;===============================================
+; Test Name: NOT Instruction Test
+; Description: Tests the bitwise NOT instruction
+; Expected Results:
+;   - eax = 0xFFFFFFFF (all bits set to 1)
+;   - ebx = 0xFFFFFFFE (all bits set to 1 except lowest)
+;===============================================
+
+; Initialize registers with test values
+MOV eax #0      ; eax = 0
+MOV ebx #1      ; ebx = 1
+
+; Test NOT instruction
+NOT eax         ; eax = ~0 = 0xFFFFFFFF
+NOT ebx         ; ebx = ~1 = 0xFFFFFFFE
+
+; End program
+HALT
