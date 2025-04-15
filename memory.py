@@ -69,8 +69,14 @@ class Memory():
 
         return value
 
-    def write(self, address, data, output=True):
-        """Write a value to memory"""
+    def write(self, address, data, output=True, propagate=None):
+        """Write a value to memory
+        Args:
+            address: Memory address to write to
+            data: Data to write
+            output: Whether to output debug information
+            propagate: Ignored parameter for compatibility with cache interface
+        """
         start_time = time()
 
         if not self._validate_address(address):

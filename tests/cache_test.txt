@@ -1,31 +1,119 @@
 ;===============================================
-; Test Name: Cache Behavior Test
-; Description: Tests cache hit/miss patterns by:
-;   - Writing values to memory
-;   - Reading same locations multiple times
-;   - Testing different cache sets
+; Test Name: Advanced Cache Hierarchy Test
+; Description: Complex test scenarios including:
+;   - Write-through vs Write-back behavior
+;   - Complex set conflicts and evictions
+;   - Edge cases and boundary conditions
+;   - Mixed access patterns
+;   - Cache pollution scenarios
+;   - Stress testing cache replacement
 ;
 ; Expected Results:
-;   - First access to each location: cache miss
-;   - Subsequent accesses: cache hits
-;   - Cache statistics should show:
-;     * Multiple hits after initial misses
-;     * Demonstration of different cache sets
+;   L1 Cache (write-through):
+;   - All writes propagate to L2
+;   - No dirty blocks
+;   - Set conflicts handled by LRU
+;
+;   L2 Cache (write-back):
+;   - Dirty blocks on writes
+;   - Write-backs on eviction
+;   - 4-way conflicts resolved
 ;===============================================
 
-; Write initial values to memory
-MOV [100] #42   ; Set 4 in L1 cache
-MOV [104] #123  ; Set 8 in L1 cache
-MOV [108] #255  ; Set 12 in L1 cache
+; Test 1: Basic Write Propagation
+MOV [100] #42   ; Initial write
+MOV [100] #43   ; Overwrite, should propagate
+MOV [100] #44   ; Another write to same location
+LOAD eax [100]  ; Should be 44
 
-; First round of reads (should be hits after the writes)
-LOAD eax [100]  ; Should be in L1 cache
-LOAD ebx [104]  ; Should be in L1 cache
-LOAD ecx [108]  ; Should be in L1 cache
+; Test 2: L1 Set Conflict (Set 4)
+MOV [100] #1    ; Already in cache
+MOV [164] #2    ; Maps to same L1 set (100 + 64)
+MOV [228] #3    ; Maps to same L1 set (164 + 64)
+MOV [292] #4    ; Should evict first entry
+LOAD ebx [100]  ; Should miss in L1 (evicted)
+LOAD ecx [164]  ; Should hit in L1
+LOAD edx [228]  ; Should hit in L1
+LOAD esi [292]  ; Should hit in L1
 
-; Second round of reads (should all be hits)
-LOAD edx [100]  ; Definite L1 cache hit
-LOAD esi [104]  ; Definite L1 cache hit
-LOAD edi [108]  ; Definite L1 cache hit
+; Test 3: L2 Write-Back Behavior
+; Fill an L2 set to force write-backs
+MOV [400] #10   ; New L2 set
+MOV [912] #20   ; Maps to same L2 set (400 + 512)
+MOV [1424] #30  ; Maps to same L2 set (912 + 512)
+MOV [1936] #40  ; Maps to same L2 set, should cause write-back
+
+; Test 4: Mixed Access Pattern
+LOAD edi [400]  ; Should hit in L2
+MOV [912] #21   ; Modify cached value
+LOAD eax [1424] ; Read recently written
+MOV [1936] #41  ; Another write to cause eviction
+LOAD ebx [400]  ; Should miss (evicted from L2)
+
+; Test 5: Cache Pollution Test
+; Write to many addresses to flush caches
+MOV [50] #1
+MOV [150] #2
+MOV [250] #3
+MOV [350] #4
+MOV [450] #5
+MOV [550] #6
+MOV [650] #7
+MOV [750] #8
+
+; Test 6: Sequential vs Random Access
+; Sequential first
+MOV [800] #10
+MOV [801] #11
+MOV [802] #12
+MOV [803] #13
+LOAD ecx [800]  ; Sequential read
+LOAD edx [801]
+LOAD esi [802]
+LOAD edi [803]
+
+; Random access to same area
+LOAD eax [803]
+LOAD ebx [800]
+LOAD ecx [802]
+LOAD edx [801]
+
+; Test 7: Edge Cases
+; Test set boundary conditions
+MOV [63] #90    ; End of first set range
+MOV [64] #91    ; Start of next set range
+MOV [127] #92   ; End of second set range
+MOV [128] #93   ; Start of third set range
+LOAD esi [63]   ; Read back boundary values
+LOAD edi [64]
+LOAD eax [127]
+LOAD ebx [128]
+
+; Test 8: Rapid Alternation
+; Quickly alternate between sets to stress replacement
+MOV [1000] #1
+MOV [1064] #2   ; Different set
+LOAD ecx [1000] ; Read first set
+MOV [1128] #3   ; Different set
+LOAD edx [1064] ; Read second set
+MOV [1192] #4   ; Different set
+LOAD esi [1128] ; Read third set
+MOV [1256] #5   ; Different set
+LOAD edi [1192] ; Read fourth set
+
+; Test 9: Write-Back Stress Test
+; Force multiple write-backs in L2
+MOV [1500] #50  ; Fill first way
+MOV [2012] #51  ; Same set, second way
+MOV [1500] #52  ; Modify first way
+MOV [2012] #53  ; Modify second way
+MOV [1500] #54  ; Modify again
+MOV [2012] #55  ; Modify again
+
+; Final verification
+LOAD eax [100]   ; Check early values
+LOAD ebx [400]   ; Check middle values
+LOAD ecx [800]   ; Check later values
+LOAD edx [1500]  ; Check final values
 
 HALT

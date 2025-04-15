@@ -14,7 +14,7 @@ def main():
     logger.log(LogLevel.INFO, f"Starting simplified ISA simulator with test file: {test_file}")
 
     # Initialize memory hierarchy
-    main_memory = Memory(name="MainMemory", size=1024)  # 1KB memory
+    main_memory = Memory(name="MainMemory", size=2048)  # 2KB memory to accommodate test addresses
 
     # Create L2 cache (slower, larger)
     l2_cache = Cache(
