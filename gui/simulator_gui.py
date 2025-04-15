@@ -19,7 +19,7 @@ from utils.logger import Logger, LogLevel
 print("Imports successful...")
 
 class SimulatorGUI(QMainWindow):
-    def __init__(self):
+    def __init__(self, main_memory=None, l1_cache=None, l2_cache=None):
         print("Initializing GUI...")
         super().__init__()
         self.setWindowTitle("CPU & Cache Simulator")
@@ -34,37 +34,43 @@ class SimulatorGUI(QMainWindow):
         self.logger = Logger()
         self.logger.log_level = LogLevel.INFO
 
-        # Create memory hierarchy with correct sizes
-        print("Setting up memory hierarchy...")
-        self.main_memory = MainMemory("MainMemory", 1024)  # 1KB memory
+        # Use provided memory hierarchy or create new one
+        if main_memory and l1_cache and l2_cache:
+            self.main_memory = main_memory
+            self.l1_cache = l1_cache
+            self.l2_cache = l2_cache
+        else:
+            # Create memory hierarchy with correct sizes
+            print("Setting up memory hierarchy...")
+            self.main_memory = MainMemory("MainMemory", 1024)  # 1KB memory
 
-        # Create L2 cache (slower, larger)
-        self.l2_cache = Cache(
-            name="L2Cache",
-            size=64,         # Reduced from 256 to 64 bytes
-            line_size=1,     # Keep 1 byte per line for simplicity
-            associativity=4, # 4-way set associative
-            access_time=30,  # 30ns access time
-            write_policy="write-back",
-            next_level=self.main_memory,
-            logger=self.logger
-        )
+            # Create L2 cache (slower, larger)
+            self.l2_cache = Cache(
+                name="L2Cache",
+                size=64,         # 64 bytes
+                line_size=1,     # 1 byte per line for simplicity
+                associativity=4, # 4-way set associative
+                access_time=30,  # 30ns access time
+                write_policy="write-back",
+                next_level=self.main_memory,
+                logger=self.logger
+            )
 
-        # Create L1 cache (faster, smaller)
-        self.l1_cache = Cache(
-            name="L1Cache",
-            size=32,         # Reduced from 64 to 32 bytes
-            line_size=1,     # Keep 1 byte per line for simplicity
-            associativity=2, # 2-way set associative
-            access_time=10,  # 10ns access time
-            write_policy="write-through",
-            next_level=self.l2_cache,
-            logger=self.logger
-        )
+            # Create L1 cache (faster, smaller)
+            self.l1_cache = Cache(
+                name="L1Cache",
+                size=32,         # 32 bytes
+                line_size=1,     # 1 byte per line for simplicity
+                associativity=2, # 2-way set associative
+                access_time=10,  # 10ns access time
+                write_policy="write-through",
+                next_level=self.l2_cache,
+                logger=self.logger
+            )
 
-        # Explicitly connect the cache hierarchy
-        self.l1_cache.set_next_level(self.l2_cache)
-        self.l2_cache.set_next_level(self.main_memory)
+            # Explicitly connect the cache hierarchy
+            self.l1_cache.set_next_level(self.l2_cache)
+            self.l2_cache.set_next_level(self.main_memory)
 
         # Create ISA with L1 cache as its memory interface
         self.isa = SimpleISA(memory=self.main_memory, cache=self.l1_cache)
@@ -414,13 +420,14 @@ class SimulatorGUI(QMainWindow):
         l1_grid = QGridLayout()
         l1_grid.setSpacing(4)
 
-        # Create L1 cache blocks (16 sets, 2 blocks each)
+        # Create L1 cache blocks (only the sets we actually use)
         self.l1_blocks = {}
-        for set_idx in range(16):
+        used_sets = [0, 4, 8, 12]  # Include set 0 to show all active blocks
+        for set_idx in used_sets:
             set_label = QLabel(f"{set_idx}")
             set_label.setStyleSheet("QLabel { color: #888888; }")
             set_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-            l1_grid.addWidget(set_label, set_idx, 0)
+            l1_grid.addWidget(set_label, used_sets.index(set_idx), 0)
 
             for block_idx in range(2):
                 block = QFrame()
@@ -442,7 +449,7 @@ class SimulatorGUI(QMainWindow):
                 block_layout.addWidget(value_label)
 
                 self.l1_blocks[f"{set_idx}_{block_idx}"] = value_label
-                l1_grid.addWidget(block, set_idx, block_idx + 1)
+                l1_grid.addWidget(block, used_sets.index(set_idx), block_idx + 1)
 
         l1_layout.addLayout(l1_grid)
         cache_layout.addLayout(l1_layout)
@@ -464,13 +471,14 @@ class SimulatorGUI(QMainWindow):
         l2_grid = QGridLayout()
         l2_grid.setSpacing(4)
 
-        # Create L2 cache blocks (16 sets, 4 blocks each)
+        # Create L2 cache blocks (only the sets we actually use)
         self.l2_blocks = {}
-        for set_idx in range(16):
+        used_sets_l2 = [0, 4, 8, 12]  # Include set 0 to show all active blocks
+        for set_idx in used_sets_l2:
             set_label = QLabel(f"{set_idx}")
             set_label.setStyleSheet("QLabel { color: #888888; }")
             set_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-            l2_grid.addWidget(set_label, set_idx, 0)
+            l2_grid.addWidget(set_label, used_sets_l2.index(set_idx), 0)
 
             for block_idx in range(4):
                 block = QFrame()
@@ -492,7 +500,7 @@ class SimulatorGUI(QMainWindow):
                 block_layout.addWidget(value_label)
 
                 self.l2_blocks[f"{set_idx}_{block_idx}"] = value_label
-                l2_grid.addWidget(block, set_idx, block_idx + 1)
+                l2_grid.addWidget(block, used_sets_l2.index(set_idx), block_idx + 1)
 
         l2_layout.addLayout(l2_grid)
         cache_layout.addLayout(l2_layout)
@@ -679,45 +687,42 @@ class SimulatorGUI(QMainWindow):
         l1_info = self.l1_cache.get_cache_state()
         l2_info = self.l2_cache.get_cache_state()
 
+        # Debug output for cache states
         print("\nDEBUG: Cache States")
         print(f"L1 Cache: {l1_info}")
         print(f"L2 Cache: {l2_info}")
 
         # Update L1 Cache blocks
-        for set_idx in range(16):
-            for block_idx in range(2):
+        used_sets = [0, 4, 8, 12]  # Include set 0 to show all active blocks
+        for set_idx in used_sets:
+            for block_idx in range(2):  # 2-way associative
                 block_key = f"{set_idx}_{block_idx}"
                 if block_key in self.l1_blocks:
                     value_label = self.l1_blocks[block_key]
                     if (set_idx, block_idx) in l1_info:
-                        value = l1_info[(set_idx, block_idx)]
-                        display_text = f"T:0 V:{value}"
+                        tag, value = l1_info[(set_idx, block_idx)]
+                        display_text = f"T:{tag} V:{value}"
                         value_label.setText(display_text)
-                        value_label.setStyleSheet("QLabel { background-color: #1e1e1e; color: #ff69b4; font-weight: bold; }")
-                        print(f"DEBUG: Updating L1 block {block_key} with {display_text}")
+                        value_label.setStyleSheet("QLabel { color: #ff69b4; font-weight: bold; }")
                     else:
                         value_label.setText("Empty")
-                        value_label.setStyleSheet("QLabel { background-color: #1e1e1e; color: #666666; }")
-                        print(f"DEBUG: Setting L1 block {block_key} to Empty")
-                    value_label.update()
+                        value_label.setStyleSheet("QLabel { color: #666666; }")
 
         # Update L2 Cache blocks
-        for set_idx in range(16):
-            for block_idx in range(4):
+        used_sets_l2 = [0, 4, 8, 12]  # Include set 0 to show all active blocks
+        for set_idx in used_sets_l2:
+            for block_idx in range(4):  # 4-way associative
                 block_key = f"{set_idx}_{block_idx}"
                 if block_key in self.l2_blocks:
                     value_label = self.l2_blocks[block_key]
                     if (set_idx, block_idx) in l2_info:
-                        value = l2_info[(set_idx, block_idx)]
-                        display_text = f"T:0 V:{value}"
+                        tag, value = l2_info[(set_idx, block_idx)]
+                        display_text = f"T:{tag} V:{value}"
                         value_label.setText(display_text)
-                        value_label.setStyleSheet("QLabel { background-color: #1e1e1e; color: #9370db; font-weight: bold; }")
-                        print(f"DEBUG: Updating L2 block {block_key} with {display_text}")
+                        value_label.setStyleSheet("QLabel { color: #9370db; font-weight: bold; }")
                     else:
                         value_label.setText("Empty")
-                        value_label.setStyleSheet("QLabel { background-color: #1e1e1e; color: #666666; }")
-                        print(f"DEBUG: Setting L2 block {block_key} to Empty")
-                    value_label.update()
+                        value_label.setStyleSheet("QLabel { color: #666666; }")
 
         # Update cache statistics
         l1_stats = self.l1_cache.get_performance_stats()
@@ -735,7 +740,7 @@ class SimulatorGUI(QMainWindow):
             f"Hit Rate: {l2_stats['hit_rate']:.2f}%"
         )
 
-        # Force immediate update of the entire window
+        # Force immediate update
         self.repaint()
         QApplication.processEvents()
 
