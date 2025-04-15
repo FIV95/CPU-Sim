@@ -1,16 +1,25 @@
 ; Enhanced Test Program with Comprehensive Cache and Memory Operations
 ; Demonstrates: Memory operations, Cache interactions, Arithmetic, Bitwise operations,
 ; Shifts, Comparisons, Control flow, and Cache eviction patterns
+; All operations follow proper load-operate-store pattern
 
-; Initialize registers with test values
-MOV eax #42    ; Test value 1
-MOV ebx #123   ; Test value 2
-MOV ecx #255   ; Test value 3
-MOV edx #0     ; Test value 4
-MOV esi #16    ; Test value 5
-MOV edi #99    ; Test value 6
+; Test 1: Initialize memory with values first (simulating program data)
+MOV [100] #42   ; Initialize Memory[100] with 42
+MOV [104] #123  ; Initialize Memory[104] with 123
+MOV [108] #255  ; Initialize Memory[108] with 255
+MOV [112] #0    ; Initialize Memory[112] with 0
+MOV [116] #16   ; Initialize Memory[116] with 16
+MOV [120] #99   ; Initialize Memory[120] with 99
 
-; Verify initial register values
+; Test 2: Load values from memory into registers for operations
+LOAD eax [100]  ; Load 42 into eax
+LOAD ebx [104]  ; Load 123 into ebx
+LOAD ecx [108]  ; Load 255 into ecx
+LOAD edx [112]  ; Load 0 into edx
+LOAD esi [116]  ; Load 16 into esi
+LOAD edi [120]  ; Load 99 into edi
+
+; Verify initial loads
 CMP eax #42    ; Verify eax = 42
 CMP ebx #123   ; Verify ebx = 123
 CMP ecx #255   ; Verify ecx = 255
@@ -18,131 +27,100 @@ CMP edx #0     ; Verify edx = 0
 CMP esi #16    ; Verify esi = 16
 CMP edi #99    ; Verify edi = 99
 
-; Test 1: Basic Memory Operations with Cache Interaction
-MOV [100] eax  ; Write 42 to Memory[100] - Should miss L1, miss L2
-LOAD eax [100] ; Read from Memory[100] - Should hit L1
-CMP eax #42    ; Verify Memory[100] = 42
+; Test 3: Shift Operations (using load-operate-store)
+LOAD eax [100]  ; Load value from Memory[100]
+SHL eax #2      ; Shift left by 2 (42 -> 168)
+MOV [100] eax   ; Store result back to Memory[100]
+LOAD ebx [100]  ; Load to verify
+CMP ebx #168    ; Verify Memory[100] = 168
 
-MOV [104] ebx  ; Write 123 to Memory[104] - Should miss L1, miss L2
-LOAD ebx [104] ; Read from Memory[104] - Should hit L1
-CMP ebx #123   ; Verify Memory[104] = 123
+LOAD eax [104]  ; Load value from Memory[104]
+SHR eax #1      ; Shift right by 1 (123 -> 61)
+MOV [104] eax   ; Store result back to Memory[104]
+LOAD ebx [104]  ; Load to verify
+CMP ebx #61     ; Verify Memory[104] = 61
 
-; Test 2: Cache Line Boundary Test
-LOAD eax [108]  ; Load current value at [108]
-CMP eax #0      ; Verify current value
-MOV [108] ecx   ; Write 255 to Memory[108]
-LOAD eax [108]  ; Load value after write
-CMP eax #255    ; Verify new value
-MOV [112] edx   ; Write 0 to Memory[112]
-LOAD ecx [108]  ; Read from Memory[108]
-LOAD edx [112]  ; Read from Memory[112]
-CMP ecx #255    ; Verify Memory[108] = 255
-CMP edx #0      ; Verify Memory[112] = 0
+; Test 4: Arithmetic Operations (using load-operate-store)
+LOAD eax [108]  ; Load from Memory[108]
+ADD eax #10     ; Add 10 (255 -> 265)
+MOV [108] eax   ; Store result back
+LOAD ebx [108]  ; Load to verify
+CMP ebx #265    ; Verify Memory[108] = 265
 
-; Test 3: Cache Set Conflict Test
-MOV [116] esi  ; Write 16 to Memory[116]
-MOV [120] edi  ; Write 99 to Memory[120]
-LOAD esi [116] ; Read from Memory[116]
-LOAD edi [120] ; Read from Memory[120]
-CMP esi #16    ; Verify Memory[116] = 16
-CMP edi #99    ; Verify Memory[120] = 99
+LOAD eax [112]  ; Load from Memory[112]
+SUB eax #5      ; Subtract 5 (0 -> -5)
+MOV [112] eax   ; Store result back
+LOAD ebx [112]  ; Load to verify
+CMP ebx #-5     ; Verify Memory[112] = -5
 
-; Test 4: Memory Shifts with Cache Interaction
-SHL [100] #2   ; Shift Memory[100] left by 2 (42 -> 168)
-LOAD eax [100] ; Read shifted value
-CMP eax #168   ; Verify Memory[100] = 168
+; Test 5: Bitwise Operations (using load-operate-store)
+LOAD eax [116]  ; Load from Memory[116]
+AND eax #240    ; AND with 240 (16 & 240 = 16)
+MOV [116] eax   ; Store result back
+LOAD ebx [116]  ; Load to verify
+CMP ebx #16     ; Verify Memory[116] = 16
 
-SHR [104] #1   ; Shift Memory[104] right by 1 (123 -> 61)
-LOAD ebx [104] ; Read shifted value
-CMP ebx #61    ; Verify Memory[104] = 61
+LOAD eax [120]  ; Load from Memory[120]
+OR eax #15      ; OR with 15 (99 | 15 = 111)
+MOV [120] eax   ; Store result back
+LOAD ebx [120]  ; Load to verify
+CMP ebx #111    ; Verify Memory[120] = 111
 
-; Test 5: Arithmetic Operations with Memory
-LOAD ecx [108] ; Load Memory[108] into ecx
-ADD ecx #10    ; Add 10 to ecx (255 -> 265)
-MOV [108] ecx  ; Store result back to Memory[108]
-LOAD ecx [108] ; Read result
-CMP ecx #265   ; Verify Memory[108] = 265
+; Test 6: Cache Eviction Pattern Test
+MOV [124] #200  ; Store new value
+LOAD eax [124]  ; Load to verify
+CMP eax #200    ; Verify Memory[124] = 200
 
-LOAD edx [112] ; Load Memory[112] into edx
-SUB edx #5     ; Subtract 5 from edx (0 -> -5)
-MOV [112] edx  ; Store result back to Memory[112]
-LOAD edx [112] ; Read result
-CMP edx #-5    ; Verify Memory[112] = -5
+; Test 7: Memory Consistency After Eviction
+LOAD eax [100]  ; Load from potentially evicted address
+CMP eax #168    ; Verify Memory[100] still = 168
 
-; Test 6: Bitwise Operations with Memory
-LOAD esi [116] ; Load Memory[116] into esi
-AND esi #240   ; AND esi with 240 (16 -> 16)
-MOV [116] esi  ; Store result back to Memory[116]
-LOAD esi [116] ; Read result
-CMP esi #16    ; Verify Memory[116] = 16
+; Test 8: Cache Line Boundary Test
+MOV [128] #300  ; Store to new address
+MOV [132] #400  ; Store to next address
+MOV [136] #500  ; Store to next address
 
-LOAD edi [120] ; Load Memory[120] into edi
-OR edi #15     ; OR edi with 15 (99 -> 111)
-MOV [120] edi  ; Store result back to Memory[120]
-LOAD edi [120] ; Read result
-CMP edi #111   ; Verify Memory[120] = 111
+LOAD eax [128]  ; Load and verify sequence
+CMP eax #300    ; Verify Memory[128] = 300
+LOAD eax [132]  ; Load next
+CMP eax #400    ; Verify Memory[132] = 400
+LOAD eax [136]  ; Load next
+CMP eax #500    ; Verify Memory[136] = 500
 
-; Test 7: Cache Eviction Pattern Test
-MOV [124] #200 ; Write to new address - Should cause eviction
-LOAD eax [124] ; Read new value
-CMP eax #200   ; Verify Memory[124] = 200
-
-; Test 8: Memory Consistency After Eviction
-LOAD ebx [100] ; Read from evicted address - Should miss
-CMP ebx #168   ; Verify Memory[100] still = 168
-
-; Test 9: Rapid Cache Access Pattern
-MOV [128] #300 ; Write to new address
-LOAD ecx [128] ; Read immediately - Should hit
-CMP ecx #300   ; Verify Memory[128] = 300
-
-; Test 10: Cache Line Boundary Stress
-MOV [132] #400 ; Write to new address
-MOV [136] #500 ; Write to adjacent address
-LOAD edx [132] ; Read first address
-LOAD esi [136] ; Read second address
-CMP edx #400   ; Verify Memory[132] = 400
-CMP esi #500   ; Verify Memory[136] = 500
-
-; Test 11: Comparison Operations
-CMP [100] #168 ; Compare Memory[100] with 168
-CMP [104] #61  ; Compare Memory[104] with 61
-CMP [108] #265 ; Compare Memory[108] with 265
-CMP [112] #-5  ; Compare Memory[112] with -5
-
-; Test 12: Control Flow with Cache Interaction
-MOV eax #3     ; Set counter for loop
+; Test 9: Control Flow with Cache
+MOV eax #3      ; Set loop counter
 LOOP_START:
-    DEC eax    ; Decrement counter
-    CMP eax #0 ; Check if counter is 0
-    JNZ LOOP_START ; Jump if not zero
+    LOAD ebx [100]  ; Load within loop to test cache
+    DEC eax         ; Decrement counter
+    CMP eax #0      ; Check if done
+    JNZ LOOP_START  ; Repeat if not zero
 
-; Test 13: Cache Set Conflict Stress
-MOV [140] #600 ; Write to new address
-MOV [144] #700 ; Write to new address
-MOV [148] #800 ; Write to new address
-LOAD eax [140] ; Read first address
-LOAD ebx [144] ; Read second address
-LOAD ecx [148] ; Read third address
-CMP eax #600   ; Verify Memory[140] = 600
-CMP ebx #700   ; Verify Memory[144] = 700
-CMP ecx #800   ; Verify Memory[148] = 800
+; Test 10: Final Cache Set Test
+MOV [140] #600   ; Store new values
+MOV [144] #700
+MOV [148] #800
+MOV [152] #900
 
-; Test 14: Memory-Cache Coherence
-MOV [152] #900 ; Write to new address
-LOAD edx [152] ; Read immediately - Should hit
-CMP edx #900   ; Verify Memory[152] = 900
+; Verify final values with proper loads
+LOAD eax [140]
+CMP eax #600
+LOAD eax [144]
+CMP eax #700
+LOAD eax [148]
+CMP eax #800
+LOAD eax [152]
+CMP eax #900
 
-; Test 15: Final Memory State Verification
-LOAD eax [100] ; Load Memory[100]
-CMP eax #168   ; Verify Memory[100] = 168
-LOAD eax [104] ; Load Memory[104]
-CMP eax #61    ; Verify Memory[104] = 61
-LOAD eax [108] ; Load Memory[108]
-CMP eax #265   ; Verify Memory[108] = 265
-LOAD eax [112] ; Load Memory[112]
-CMP eax #-5    ; Verify Memory[112] = -5
-LOAD eax [116] ; Load Memory[116]
-CMP eax #16    ; Verify Memory[116] = 16
-LOAD eax [120] ; Load Memory[120]
-CMP eax #111   ; Verify Memory[120] = 111
+; Final verification of all modified values
+LOAD eax [100]   ; Verify all previous operations
+CMP eax #168     ; Should be 168 (after shift)
+LOAD eax [104]
+CMP eax #61      ; Should be 61 (after shift)
+LOAD eax [108]
+CMP eax #265     ; Should be 265 (after add)
+LOAD eax [112]
+CMP eax #-5      ; Should be -5 (after subtract)
+LOAD eax [116]
+CMP eax #16      ; Should be 16 (after AND)
+LOAD eax [120]
+CMP eax #111     ; Should be 111 (after OR)
