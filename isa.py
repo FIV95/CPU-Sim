@@ -36,6 +36,8 @@ class InstructionType(Enum):
     CMP = auto()    # Compare two values
     TEST = auto()   # Test bits (AND without storing)
     HALT = auto()   # Stop execution
+    PRINT_CACHE = auto()  # Print cache state
+    PRINT_REG = auto()    # Print register state
 
 @dataclass
 class Instruction:
@@ -131,6 +133,8 @@ class SimpleISA:
                 self._execute_mov(instruction.operands)
             elif instruction.type == InstructionType.LOAD:
                 self._execute_load(instruction.operands)
+            elif instruction.type == InstructionType.STORE:
+                self._execute_store(instruction.operands)
             elif instruction.type == InstructionType.ADD:
                 self._execute_add(instruction.operands)
             elif instruction.type == InstructionType.SUB:
@@ -161,6 +165,10 @@ class SimpleISA:
                 self.pc = self._execute_jz(instruction.operands)
             elif instruction.type == InstructionType.JNZ:
                 self.pc = self._execute_jnz(instruction.operands)
+            elif instruction.type == InstructionType.PRINT_CACHE:
+                self._print_cache_state()
+            elif instruction.type == InstructionType.PRINT_REG:
+                self._print_register_state()
             elif instruction.type == InstructionType.HALT:
                 self.running = False
                 return False
@@ -516,6 +524,36 @@ class SimpleISA:
             'source': f'memory[{addr}]'
         })
 
+    def _execute_store(self, operands: List[str]) -> None:
+        """Execute STORE instruction"""
+        if len(operands) != 2:
+            raise ValueError("STORE requires 2 operands")
+
+        dest, src = operands
+
+        # Get source value
+        if src.startswith('['):
+            addr = self._evaluate_address(src[1:-1])
+            value = self.cache.read(addr) if self.cache else self.memory.read(addr)
+        else:
+            value = self.registers.get(src, 0)
+
+        # Store in memory
+        if dest.startswith('['):
+            addr = self._evaluate_address(dest[1:-1])
+            if self.cache:
+                self.cache.write(addr, value)
+            self.memory.write(addr, value)
+        else:
+            self.registers[dest] = value
+
+        # Log register operation with enhanced visualization
+        self.logger.log_register_operation('store', {
+            'dest': dest,
+            'value': value,
+            'source': src
+        })
+
     def _execute_cmp(self, operands: List[str]) -> None:
         """Execute CMP instruction"""
         if len(operands) != 2:
@@ -529,8 +567,10 @@ class SimpleISA:
         else:
             value = self.registers.get(src, 0)
 
-        # Compare values
-        self.registers[dest] = 1 if self.registers[dest] < value else 0
+        # Compare values but don't modify the destination register
+        # Instead, store the comparison result in a flag
+        dest_val = self.registers.get(dest, 0)
+        self.registers['eax'] = 1 if dest_val < value else 0
 
     def _execute_test(self, operands: List[str]) -> None:
         """Execute TEST instruction"""
@@ -547,6 +587,65 @@ class SimpleISA:
 
         # Test bits (AND without storing)
         self.registers[dest] = 1 if self.registers[dest] & value else 0
+
+    def _print_cache_state(self):
+        """Print detailed cache state information"""
+        print("\n=== CACHE STATE ===")
+
+        # Print L1 Cache State
+        if self.cache:
+            l1_state = self.cache.get_cache_state()
+            print("\nL1 Cache Contents:")
+            print("Set\tWay\tTag\tData")
+            print("-" * 30)
+            for set_idx in range(16):  # Assuming 16 sets
+                found_entries = False
+                for block_idx in range(2):  # 2-way associative
+                    if (set_idx, block_idx) in l1_state:
+                        tag, data = l1_state[(set_idx, block_idx)]
+                        print(f"{set_idx}\t{block_idx}\t{tag}\t{data}")
+                        found_entries = True
+                if not found_entries:
+                    print(f"{set_idx}\t-\t-\tEmpty")
+
+            # Print L1 Cache Stats
+            l1_stats = self.cache.get_performance_stats()
+            print(f"\nL1 Cache Stats:")
+            print(f"Hits: {l1_stats['hits']}")
+            print(f"Misses: {l1_stats['misses']}")
+            print(f"Hit Rate: {l1_stats['hit_rate']:.2f}%")
+
+            # Print L2 Cache State
+            if self.cache._next_level:
+                l2_state = self.cache._next_level.get_cache_state()
+                print("\nL2 Cache Contents:")
+                print("Set\tWay\tTag\tData")
+                print("-" * 30)
+                for set_idx in range(16):  # Assuming 16 sets
+                    found_entries = False
+                    for block_idx in range(4):  # 4-way associative
+                        if (set_idx, block_idx) in l2_state:
+                            tag, data = l2_state[(set_idx, block_idx)]
+                            print(f"{set_idx}\t{block_idx}\t{tag}\t{data}")
+                            found_entries = True
+                    if not found_entries:
+                        print(f"{set_idx}\t-\t-\tEmpty")
+
+                # Print L2 Cache Stats
+                l2_stats = self.cache._next_level.get_performance_stats()
+                print(f"\nL2 Cache Stats:")
+                print(f"Hits: {l2_stats['hits']}")
+                print(f"Misses: {l2_stats['misses']}")
+                print(f"Hit Rate: {l2_stats['hit_rate']:.2f}%")
+
+        print("\n=== END CACHE STATE ===\n")
+
+    def _print_register_state(self):
+        """Print detailed register state information"""
+        print("\n=== REGISTER STATE ===")
+        for reg, value in self.registers.items():
+            print(f"{reg}: {value}")
+        print("=== END REGISTER STATE ===\n")
 
     def _evaluate_address(self, expr: str) -> int:
         """Evaluate a memory address expression"""

@@ -1,0 +1,159 @@
+;===============================================
+; Test Name: Comprehensive Memory Consistency Test
+; Description: Tests memory operations and cache-memory interaction:
+;   - Memory writes through cache
+;   - Direct memory access
+;   - Memory consistency after cache evictions
+;   - Value verification at all levels
+;   - Edge cases and fringe scenarios
+;
+; Expected Results:
+;   Memory Operations:
+;   - Values written through cache appear in memory
+;   - Values can be read back from memory
+;   - Memory remains consistent after cache evictions
+;   - Memory values survive cache replacements
+;   - Edge cases handled correctly
+;===============================================
+
+; Test 1: Basic Memory Write-Through
+; Write values through cache and verify in memory
+MOV [100] #42   ; Write through L1->L2->Memory
+MOV [200] #84   ; Write through L1->L2->Memory
+LOAD eax [100]  ; Should be in L1 cache
+LOAD ebx [200]  ; Should be in L1 cache
+
+; Test 2: Memory Consistency After Cache Eviction
+; Fill cache set to force eviction, then verify memory
+MOV [300] #1    ; First value
+MOV [364] #2    ; Maps to same L1 set
+MOV [428] #3    ; Maps to same L1 set
+MOV [492] #4    ; Should cause eviction
+; Now verify first value directly from memory
+LOAD ecx [300]  ; Should read from memory (L1 miss)
+
+; Test 3: Multiple Writes to Same Location
+; Ensure memory has latest value
+MOV [500] #10   ; Initial write
+MOV [500] #20   ; Update value
+MOV [500] #30   ; Update again
+MOV [500] #40   ; Final value
+LOAD edx [500]  ; Should be 40
+
+; Test 4: Memory Retention After Cache Flush
+; Write values, then force cache eviction
+MOV [600] #55   ; Write initial value
+MOV [664] #66   ; Same cache set
+MOV [728] #77   ; Same cache set
+MOV [792] #88   ; Force eviction
+MOV [856] #99   ; Force more eviction
+; Verify original value survived eviction
+LOAD esi [600]  ; Should get 55 from memory
+
+; Test 5: Large Memory Range Access
+; Test memory consistency across different regions
+MOV [1000] #1
+MOV [1200] #2
+MOV [1400] #3
+MOV [1600] #4
+MOV [1800] #5
+; Force cache misses by reading in reverse
+LOAD edi [1800]  ; Should be 5
+LOAD eax [1600]  ; Should be 4
+LOAD ebx [1400]  ; Should be 3
+LOAD ecx [1200]  ; Should be 2
+LOAD edx [1000]  ; Should be 1
+
+; Test 6: Memory-Cache Coherence
+; Write to memory through cache, then force eviction
+MOV [800] #100   ; Write through cache
+MOV [800] #101   ; Update in cache
+MOV [800] #102   ; Update again
+; Force eviction by filling set
+MOV [864] #200
+MOV [928] #201
+MOV [992] #202
+; Verify final value in memory
+LOAD esi [800]   ; Should be 102
+
+; Test 7: Rapid Memory Updates
+; Quick succession of writes followed by read
+MOV [1500] #60   ; Initial write
+MOV [1500] #61   ; Quick update 1
+MOV [1500] #62   ; Quick update 2
+MOV [1500] #63   ; Quick update 3
+MOV [1500] #64   ; Final update
+LOAD edi [1500]  ; Should be 64
+
+; Test 8: Cache Set Conflict Stress
+; Force multiple conflicts in same cache set
+MOV [1024] #1    ; Set 0
+MOV [1088] #2    ; Same set
+MOV [1152] #3    ; Same set
+MOV [1216] #4    ; Same set
+MOV [1280] #5    ; Same set
+MOV [1344] #6    ; Same set
+; Read back in different order
+LOAD eax [1024]  ; Should be 1
+LOAD ebx [1152]  ; Should be 3
+LOAD ecx [1280]  ; Should be 5
+LOAD edx [1216]  ; Should be 4
+
+; Test 9: Write-Back Stress Test
+; Multiple writes to same locations
+MOV [2000] #1    ; Initial write
+MOV [2000] #2    ; Update
+MOV [2000] #3    ; Update
+MOV [2000] #4    ; Update
+MOV [2000] #5    ; Update
+; Force eviction with sequential addresses
+MOV [2004] #10   ; Next address
+MOV [2008] #20   ; Next address
+MOV [2012] #30   ; Next address
+MOV [2016] #40   ; Next address
+; Verify final value
+LOAD esi [2000]  ; Should be 5
+
+; Test 10: Memory Boundary Test
+; Test memory access near boundaries
+MOV [0] #255     ; First address
+MOV [4] #254     ; Second address
+MOV [8] #253     ; Third address
+MOV [12] #252    ; Fourth address
+; Read back
+LOAD eax [0]     ; Should be 255
+LOAD ebx [4]     ; Should be 254
+LOAD ecx [8]     ; Should be 253
+LOAD edx [12]    ; Should be 252
+
+; Test 11: Cache Line Boundary Test
+; Test memory access across cache line boundaries
+MOV [64] #1      ; End of first cache line
+MOV [68] #2      ; Start of second cache line
+MOV [72] #3      ; Second cache line
+MOV [76] #4      ; Second cache line
+; Read back
+LOAD eax [64]    ; Should be 1
+LOAD ebx [68]    ; Should be 2
+LOAD ecx [72]    ; Should be 3
+LOAD edx [76]    ; Should be 4
+
+; Test 12: Memory Consistency Under Load
+; Multiple rapid writes and reads
+MOV [3000] #1
+LOAD eax [3000]  ; Should be 1
+MOV [3000] #2
+LOAD ebx [3000]  ; Should be 2
+MOV [3000] #3
+LOAD ecx [3000]  ; Should be 3
+MOV [3000] #4
+LOAD edx [3000]  ; Should be 4
+
+; Final Memory Verification
+; Read back key values to verify memory consistency
+LOAD eax [100]   ; Should be 42
+LOAD ebx [500]   ; Should be 40
+LOAD ecx [800]   ; Should be 102
+LOAD edx [1500]  ; Should be 64
+
+HALT

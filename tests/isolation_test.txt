@@ -1,0 +1,54 @@
+; Isolation Test for Memory/Cache Operations
+; Focuses on operations around address 108 to identify the issue
+
+; Initialize registers with known values
+MOV eax #42    ; Test value 1
+MOV ebx #123   ; Test value 2
+MOV ecx #255   ; Test value 3
+
+; Test 1: Basic write to address 108
+MOV [108] ecx  ; Write 255 to Memory[108]
+PRINT_CACHE    ; Show cache state after write
+
+; Test 2: Read from address 108
+LOAD eax [108] ; Read from Memory[108]
+PRINT_CACHE    ; Show cache state after read
+
+; Test 3: Write to adjacent address
+MOV [112] ebx  ; Write 123 to Memory[112]
+PRINT_CACHE    ; Show cache state after adjacent write
+
+; Test 4: Read from both addresses
+LOAD ecx [108] ; Read from Memory[108]
+LOAD ebx [112] ; Read from Memory[112]
+PRINT_CACHE    ; Show cache state after reads
+
+; Test 5: Write back to 108
+MOV [108] eax  ; Write 42 to Memory[108]
+PRINT_CACHE    ; Show cache state after write back
+
+; Test 6: Verify values
+LOAD eax [108] ; Read from Memory[108]
+CMP eax #42    ; Verify Memory[108] = 42
+LOAD ebx [112] ; Read from Memory[112]
+CMP ebx #123   ; Verify Memory[112] = 123
+
+; Test 7: Cache Line Boundary Test
+MOV [116] esi  ; Write 16 to Memory[116]
+MOV [120] edi  ; Write 99 to Memory[120]
+LOAD esi [116] ; Read from Memory[116]
+LOAD edi [120] ; Read from Memory[120]
+CMP esi #16    ; Verify Memory[116] = 16
+CMP edi #99    ; Verify Memory[120] = 99
+
+; Test 8: Memory Shifts with Cache Interaction
+SHL [100] #2   ; Shift Memory[100] left by 2 (42 -> 168)
+LOAD eax [100] ; Read shifted value
+CMP eax #168   ; Verify Memory[100] = 168
+
+SHR [104] #1   ; Shift Memory[104] right by 1 (123 -> 61)
+LOAD ebx [104] ; Read shifted value
+CMP ebx #61    ; Verify Memory[104] = 61
+
+; Print final memory state
+PRINT_CACHE

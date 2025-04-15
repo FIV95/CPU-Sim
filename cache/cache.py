@@ -55,6 +55,38 @@ class Cache:
         """Set the next level in the memory hierarchy"""
         self._next_level = next_level
 
+    def _calculate_cache_indices(self, address):
+        """Calculate set index and tag for a given address
+
+        For Python integers, we'll use a 32-bit addressing scheme:
+        - Offset bits = log2(line_size)
+        - Index bits = log2(num_sets)
+        - Tag bits = 32 - offset_bits - index_bits
+        """
+        # Calculate required bits for each field
+        offset_bits = (self._line_size - 1).bit_length()  # Number of bits needed for byte offset
+        index_bits = (self._sets - 1).bit_length()        # Number of bits needed for set index
+
+        # Create masks for extracting fields
+        offset_mask = (1 << offset_bits) - 1
+        index_mask = ((1 << index_bits) - 1) << offset_bits
+
+        # Extract fields using masks
+        offset = address & offset_mask
+        set_index = (address & index_mask) >> offset_bits
+        tag = address >> (offset_bits + index_bits)
+
+        # Debug output
+        self._logger.log(LogLevel.DEBUG, f"\nAddress Breakdown for {self._name}:")
+        self._logger.log(LogLevel.DEBUG, f"Address: {address} (0x{address:x})")
+        self._logger.log(LogLevel.DEBUG, f"Line Size: {self._line_size} (offset bits: {offset_bits})")
+        self._logger.log(LogLevel.DEBUG, f"Sets: {self._sets} (index bits: {index_bits})")
+        self._logger.log(LogLevel.DEBUG, f"Offset: {offset} (0x{offset:x})")
+        self._logger.log(LogLevel.DEBUG, f"Set Index: {set_index} (0x{set_index:x})")
+        self._logger.log(LogLevel.DEBUG, f"Tag: {tag} (0x{tag:x})")
+
+        return set_index, tag
+
     def read(self, address, output=True):
         """Read data from cache"""
         start_time = time()
@@ -71,9 +103,8 @@ class Cache:
             'time': start_time
         })
 
-        # Calculate set index and tag
-        set_index = (address // self._line_size) % self._sets
-        tag = address // (self._line_size * self._sets)
+        # Calculate set index and tag using bit masking
+        set_index, tag = self._calculate_cache_indices(address)
 
         self._logger.log(LogLevel.DEBUG, f"Set Index: {set_index}, Tag: {tag}")
         self._logger.log(LogLevel.DEBUG, f"Current Set Contents: {self._entries[set_index]}")
@@ -172,13 +203,20 @@ class Cache:
         else:
             raise ValueError("No next level cache/memory available")
 
-    def write(self, address, data, output=True):
-        """Write data to cache"""
+    def write(self, address, data, output=True, propagate=True):
+        """Write data to cache
+        Args:
+            address: Memory address to write to
+            data: Data to write
+            output: Whether to output debug information
+            propagate: Whether to propagate writes to next level (used internally)
+        """
         start_time = time()
 
         # Debug log for every write attempt
-        self._logger.log(LogLevel.DEBUG, f"\n=== Cache Write Operation ===")
+        self._logger.log(LogLevel.DEBUG, f"\n=== Cache Write Operation ({self._name}) ===")
         self._logger.log(LogLevel.DEBUG, f"Address: {address}, Data: {data}")
+        self._logger.log(LogLevel.DEBUG, f"Write Policy: {self._write_policy}")
         self._logger.log(LogLevel.DEBUG, f"Current Stats - Hits: {self._stats['hits']}, Misses: {self._stats['misses']}")
 
         # Ensure data is integer
@@ -192,22 +230,29 @@ class Cache:
             'time': start_time
         })
 
-        # Calculate set index and tag
-        set_index = (address // self._line_size) % self._sets
-        tag = address // (self._line_size * self._sets)
+        # Calculate set index and tag using bit masking
+        set_index, tag = self._calculate_cache_indices(address)
 
         self._logger.log(LogLevel.DEBUG, f"Set Index: {set_index}, Tag: {tag}")
         self._logger.log(LogLevel.DEBUG, f"Current Set Contents: {self._entries[set_index]}")
 
-        # Always write to next level first for write-through
-        if self._next_level:
-            self._next_level.write(address, data)
+        # Check for hit
+        hit_entry = None
+        for entry in self._entries[set_index]:
+            if entry["tag"] == tag and entry["valid"]:
+                hit_entry = entry
+                break
 
-            # Log the write-through with enhanced visualization
+        if hit_entry:
+            # Cache hit
+            self._stats['hits'] += 1
+            self._stats['writes'] += 1
+
+            # Log the hit
             if output:
                 self._logger.log_cache_operation(
                     self._name,
-                    'through',
+                    'write',
                     True,
                     {
                         'address': address,
@@ -216,91 +261,83 @@ class Cache:
                         'tag': tag,
                         'associativity': self._associativity,
                         'entries': len(self._entries[set_index]),
-                        'write_policy': self._write_policy
+                        'dirty': hit_entry["dirty"]
                     }
                 )
 
-        # Check for hit
-        for entry in self._entries[set_index]:
-            if entry["tag"] == tag and entry["valid"]:
-                # Cache hit
-                self._stats['hits'] += 1
-                self._stats['writes'] += 1
+            # Update data
+            hit_entry["data"] = data
 
-                # Log the hit with enhanced visualization
-                if output:
-                    self._logger.log_cache_operation(
-                        self._name,
-                        'write',
-                        True,
-                        {
-                            'address': address,
-                            'value': data,
-                            'set': set_index,
-                            'tag': tag,
-                            'associativity': self._associativity,
-                            'entries': len(self._entries[set_index]),
-                            'dirty': entry["dirty"]
-                        }
-                    )
+            # Handle write policy
+            if self._write_policy == "write-through" and self._next_level and propagate:
+                # Propagate to next level for write-through
+                self._next_level.write(address, data, output, propagate=True)
+            else:
+                # Mark as dirty for write-back
+                hit_entry["dirty"] = True
 
-                # Update data and mark as dirty
-                entry["data"] = data
-                entry["dirty"] = True if self._write_policy == "write-back" else False
+            # Update LRU order
+            self._update_lru(set_index, hit_entry)
 
-                # Update LRU order
-                self._update_lru(set_index, entry)
+        else:
+            # Cache miss
+            self._stats['misses'] += 1
+            self._stats['writes'] += 1
 
-                # Calculate access time and update statistics
-                access_time = time() - start_time
-                self._exec_time += access_time
-                self._update_stats(access_time)
+            # Log the miss
+            if output:
+                self._logger.log_cache_operation(
+                    self._name,
+                    'write',
+                    False,
+                    {
+                        'address': address,
+                        'value': data,
+                        'set': set_index,
+                        'tag': tag,
+                        'associativity': self._associativity,
+                        'entries': len(self._entries[set_index]),
+                        'eviction_needed': len(self._entries[set_index]) >= self._associativity
+                    }
+                )
 
-                return True
+            # Create new entry
+            new_entry = {
+                "tag": tag,
+                "data": data,
+                "valid": True,
+                "dirty": self._write_policy == "write-back",  # Only mark dirty for write-back
+                "lru": 0
+            }
 
-        # Cache miss
-        self._stats['misses'] += 1
-        self._stats['writes'] += 1
+            # Handle set full condition
+            if len(self._entries[set_index]) >= self._associativity:
+                # Find LRU entry to replace
+                lru_entry = min(self._entries[set_index], key=lambda x: x["lru"])
+                if lru_entry["dirty"] and self._write_policy == "write-back" and self._next_level:
+                    # Calculate original address using bit fields
+                    offset_bits = (self._line_size - 1).bit_length()
+                    index_bits = (self._sets - 1).bit_length()
+                    old_address = (lru_entry["tag"] << (offset_bits + index_bits)) | (set_index << offset_bits)
 
-        # Log the miss with enhanced visualization
-        if output:
-            self._logger.log_cache_operation(
-                self._name,
-                'write',
-                False,
-                {
-                    'address': address,
-                    'value': data,
-                    'set': set_index,
-                    'tag': tag,
-                    'associativity': self._associativity,
-                    'entries': len(self._entries[set_index]),
-                    'eviction_needed': len(self._entries[set_index]) >= self._associativity
-                }
-            )
+                    # Debug log address reconstruction
+                    self._logger.log(LogLevel.DEBUG, f"\n=== Write-Back Address Reconstruction ===")
+                    self._logger.log(LogLevel.DEBUG, f"Tag: {lru_entry['tag']}, Set Index: {set_index}")
+                    self._logger.log(LogLevel.DEBUG, f"Offset bits: {offset_bits}, Index bits: {index_bits}")
+                    self._logger.log(LogLevel.DEBUG, f"Reconstructed address: {old_address}")
 
-        # Create new entry
-        new_entry = {
-            "tag": tag,
-            "data": data,
-            "valid": True,
-            "dirty": True if self._write_policy == "write-back" else False,
-            "lru": 0
-        }
+                    # Write back dirty data before eviction
+                    self._next_level.write(old_address, lru_entry["data"], output, propagate=True)
+                self._entries[set_index].remove(lru_entry)
 
-        # Handle set full condition
-        if len(self._entries[set_index]) >= self._associativity:
-            # Find LRU entry to replace
-            lru_entry = min(self._entries[set_index], key=lambda x: x["lru"])
-            if lru_entry["dirty"] and self._write_policy == "write-back":
-                # Write back dirty data
-                old_address = lru_entry["tag"] * (self._line_size * self._sets) + (set_index * self._line_size)
-                self._next_level.write(old_address, lru_entry["data"])
-            self._entries[set_index].remove(lru_entry)
+            # Add new entry
+            self._entries[set_index].append(new_entry)
+            self._update_lru(set_index, new_entry)
 
-        # Add new entry
-        self._entries[set_index].append(new_entry)
-        self._update_lru(set_index, new_entry)
+            # Handle write policy for new entries
+            if self._write_policy == "write-through" and self._next_level and propagate:
+                # Propagate to next level for write-through
+                self._next_level.write(address, data, output, propagate=True)
 
         # Calculate access time and update statistics
         access_time = time() - start_time
@@ -332,12 +369,12 @@ class Cache:
                         f"hit_rate={self._stats['hits']/self._stats['reads'] if self._stats['reads'] > 0 else 0:.2%}")
 
     def get_cache_state(self):
-        """Return the current state of the cache as a dictionary mapping (set_index, block_index) to data"""
+        """Return the current state of the cache as a dictionary mapping (set_index, block_index) to (tag, data)"""
         state = {}
         for set_idx in range(len(self._entries)):
             for block_idx, entry in enumerate(self._entries[set_idx]):
                 if entry["valid"]:
-                    state[(set_idx, block_idx)] = entry["data"]
+                    state[(set_idx, block_idx)] = (entry["tag"], entry["data"])
         return state
 
     def get_performance_stats(self):

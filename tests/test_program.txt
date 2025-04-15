@@ -6,7 +6,6 @@
 MOV eax #42    ; Test value 1
 MOV ebx #123   ; Test value 2
 MOV ecx #255   ; Test value 3
-PRINT_REG      ; Debug: Check initial ecx value
 MOV edx #0     ; Test value 4
 MOV esi #16    ; Test value 5
 MOV edi #99    ; Test value 6
@@ -14,39 +13,31 @@ MOV edi #99    ; Test value 6
 ; Verify initial register values
 CMP eax #42    ; Verify eax = 42
 CMP ebx #123   ; Verify ebx = 123
-PRINT_REG      ; Debug: Check ecx before CMP
 CMP ecx #255   ; Verify ecx = 255
-PRINT_REG      ; Debug: Check ecx after CMP
 CMP edx #0     ; Verify edx = 0
 CMP esi #16    ; Verify esi = 16
 CMP edi #99    ; Verify edi = 99
 
 ; Test 1: Basic Memory Operations with Cache Interaction
 MOV [100] eax  ; Write 42 to Memory[100] - Should miss L1, miss L2
-PRINT_REG      ; Debug: Check ecx after MOV [100]
 LOAD eax [100] ; Read from Memory[100] - Should hit L1
 CMP eax #42    ; Verify Memory[100] = 42
 
 MOV [104] ebx  ; Write 123 to Memory[104] - Should miss L1, miss L2
-PRINT_REG      ; Debug: Check ecx before LOAD
 LOAD ebx [104] ; Read from Memory[104] - Should hit L1
 CMP ebx #123   ; Verify Memory[104] = 123
 
 ; Test 2: Cache Line Boundary Test
-PRINT_CACHE     ; Debug: Show cache state before problematic instruction
-PRINT_REG      ; Debug: Show register state before problematic instruction
-LOAD eax [108]  ; Debug: Load current value at [108]
-CMP eax #0      ; Debug: Verify current value
-MOV [108] ecx  ; Write 255 to Memory[108]
-PRINT_CACHE     ; Debug: Show cache state after problematic instruction
-PRINT_REG      ; Debug: Show register state after problematic instruction
-LOAD eax [108]  ; Debug: Load value after write
-CMP eax #255    ; Debug: Verify new value
-MOV [112] edx  ; Write 0 to Memory[112]
-LOAD ecx [108] ; Read from Memory[108]
-LOAD edx [112] ; Read from Memory[112]
-CMP ecx #255   ; Verify Memory[108] = 255
-CMP edx #0     ; Verify Memory[112] = 0
+LOAD eax [108]  ; Load current value at [108]
+CMP eax #0      ; Verify current value
+MOV [108] ecx   ; Write 255 to Memory[108]
+LOAD eax [108]  ; Load value after write
+CMP eax #255    ; Verify new value
+MOV [112] edx   ; Write 0 to Memory[112]
+LOAD ecx [108]  ; Read from Memory[108]
+LOAD edx [112]  ; Read from Memory[112]
+CMP ecx #255    ; Verify Memory[108] = 255
+CMP edx #0      ; Verify Memory[112] = 0
 
 ; Test 3: Cache Set Conflict Test
 MOV [116] esi  ; Write 16 to Memory[116]
@@ -155,6 +146,3 @@ LOAD eax [116] ; Load Memory[116]
 CMP eax #16    ; Verify Memory[116] = 16
 LOAD eax [120] ; Load Memory[120]
 CMP eax #111   ; Verify Memory[120] = 111
-
-; Print final cache state
-PRINT_CACHE
