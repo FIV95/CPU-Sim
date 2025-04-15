@@ -1,13 +1,19 @@
-# Rust Memory Architecture Simulator
+# CPU Architecture Simulator
 
 ## Overview
-This project simulates a memory architecture with cache hierarchy and instruction execution. The simulator includes:
+This project simulates a CPU architecture with memory hierarchy and instruction execution. The simulator includes:
 
 - Memory hierarchy (L1 Cache, L2 Cache, Main Memory)
-- Instruction Set Architecture (ISA) with x86-like assembly support
+- Custom assembly language with simple instruction set
+- GUI-based visualization of memory and cache states
 - Detailed debugging and performance metrics
 
 ## Recent Changes
+
+### GUI Improvements
+- **Memory Display Window**: Added real-time memory value display
+- **Cache Visualization**: Enhanced cache state visualization
+- **Interactive Controls**: Step-by-step execution and program loading
 
 ### Cache Simulation Improvements
 - **Simplified Cache Line Size**: Changed to 1-byte cache lines for more intuitive and consistent behavior
@@ -15,13 +21,15 @@ This project simulates a memory architecture with cache hierarchy and instructio
 - **Memory Access Patterns**: Better simulation of memory access patterns and cache behavior
 - **Cache Hierarchy**: L1 (64B, 2-way) → L2 (256B, 4-way) → Main Memory (1KB)
 
-### Enhanced ISA with x86 Assembly Support
-We've expanded the ISA to support x86-style assembly instructions, including:
+### Custom Assembly Language
+The simulator implements a simple assembly language with the following features:
 
-- **Conditional Jumps**: JZ, JNZ, JG, JL, JGE, JLE
-- **Stack Operations**: PUSH, POP
-- **Subroutine Calls**: CALL, RET
-- **Comparison**: CMP (sets flags for conditional jumps)
+- **Memory Operations**: LOAD, STORE, MOV
+- **Arithmetic**: ADD, SUB
+- **Bitwise**: AND, OR, XOR
+- **Shifts**: SHL, SHR
+- **Comparison**: CMP
+- **Control Flow**: JMP, JZ, JNZ
 
 ### Improved Debugging
 Added comprehensive debugging capabilities:
@@ -33,37 +41,42 @@ Added comprehensive debugging capabilities:
 - **Register State Tracking**: Monitors register values before and after each instruction
 
 ### Example Programs
-- `x86_bubble_sort.asm`: A bubble sort implementation using x86-style assembly
-- `test_program.txt`: Memory and cache testing program
+- `tests/test_program.txt`: Comprehensive test program demonstrating memory operations, cache interactions, and instruction execution
 
 ## Usage
 
 ### Running the Simulator
 ```bash
-python3 gui/simulator_gui.py
+# Run with a specific program file
+python gui/simulator_gui.py tests/test_program.txt
+
+# Run without a program file (load one through the GUI)
+python gui/simulator_gui.py
 ```
 
 ### Writing Assembly Programs
-Assembly programs should follow the x86-like syntax:
+Assembly programs should follow our custom syntax:
 
 ```
-# Comments start with #
+; Comments start with ;
 LABEL:
-    INSTRUCTION OPERAND1, OPERAND2
+    INSTRUCTION OPERAND1 OPERAND2
 ```
 
 ### Supported Instructions
 - **MOV**: Move data between registers and memory
+- **LOAD**: Load value from memory to register
+- **STORE**: Store value from register to memory
 - **ADD**: Add two values
 - **SUB**: Subtract two values
-- **CMP**: Compare two values (sets flags)
+- **AND**: Bitwise AND
+- **OR**: Bitwise OR
+- **XOR**: Bitwise XOR
+- **SHL**: Shift left
+- **SHR**: Shift right
+- **CMP**: Compare two values
 - **JMP**: Unconditional jump
 - **JZ/JNZ**: Jump if zero/not zero
-- **JG/JL**: Jump if greater/less than
-- **JGE/JLE**: Jump if greater or equal/less or equal
-- **PUSH/POP**: Stack operations
-- **CALL/RET**: Subroutine calls
-- **LOAD**: Load value from memory to register
 
 ## Memory Hierarchy
 The simulator implements a three-level memory hierarchy:
@@ -86,8 +99,27 @@ The simulator implements a three-level memory hierarchy:
 - Size: 1KB
 - Access time: 100ns
 
+## Project Structure
+```
+.
+├── gui/
+│   └── simulator_gui.py    # GUI implementation
+├── tests/
+│   └── test_program.txt    # Test program
+├── cache/                  # Cache implementation
+├── utils/                  # Utility functions
+├── isa.py                  # Instruction Set Architecture
+├── memory.py              # Memory implementation
+├── main.py                # Main entry point
+├── instructions.txt       # Instruction documentation
+├── INSTRUCTION_ADDITION.md # Instruction addition guidelines
+├── TODO.md               # Planned improvements
+├── FUTURE_IMPROVEMENTS.txt # Detailed future plans
+└── README.md             # This file
+```
+
 ## Debugging
-The simulator writes detailed debug information to `debug.txt`, including:
+The simulator provides real-time debugging information through the GUI, including:
 
 - Instruction execution trace
 - Register state changes
@@ -97,8 +129,7 @@ The simulator writes detailed debug information to `debug.txt`, including:
 - Cache statistics (hits, misses, hit rates)
 
 ## Future Improvements
-- Support for more x86 instructions
-- Enhanced visualization of memory and cache state
+- Support for more instructions
+- Enhanced cache visualization
 - Performance optimization
-- More example programs
-- GUI improvements for cache visualization
+- Additional test programs
